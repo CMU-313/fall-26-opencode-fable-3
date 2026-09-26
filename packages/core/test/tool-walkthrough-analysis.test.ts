@@ -67,6 +67,14 @@ describe("WalkthroughAnalysis.analyze", () => {
     expect(api.description).toBeUndefined()
   })
 
+  test("skips README lead-in lines that only introduce a list or code block", () => {
+    const readme = "# Solo\n\nTo install dependencies:\n\n```sh\nbun i\n```\n\nSmall CLI for parsing logs."
+    const overview = WalkthroughAnalysis.analyze(
+      snapshot({ "package.json": json({ name: "solo" }), "README.md": readme }),
+    )
+    expect(overview.packages[0].description).toBe("Small CLI for parsing logs.")
+  })
+
   test("counts top-level directories and finds root docs", () => {
     const overview = WalkthroughAnalysis.analyze(snapshot(monorepo))
     expect(overview.topLevel).toEqual([

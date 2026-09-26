@@ -87,7 +87,7 @@ const excerpt = (text: string | undefined) => {
   const paragraph = text
     ?.split(/\n\s*\n/)
     .map((block) => block.trim())
-    .find((block) => block && !/^[#<>|`\-*[!]/.test(block))
+    .find((block) => block && !/^[#<>|`\-*[!]/.test(block) && !block.endsWith(":"))
   if (!paragraph) return undefined
   const line = paragraph.replace(/\s+/g, " ")
   return line.length > MAX_DESCRIPTION ? `${line.slice(0, MAX_DESCRIPTION - 1)}…` : line
