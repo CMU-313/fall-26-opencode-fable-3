@@ -164,9 +164,7 @@ export const analyze = (snapshot: Snapshot): Overview => {
   return {
     ...(name ? { name } : {}),
     packages,
-    topLevel: [...counts]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([path, count]) => ({ path, files: count })),
+    topLevel: [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([path, count]) => ({ path, files: count })),
     docs: DOCS.filter((doc) => present.has(doc)),
   }
 }

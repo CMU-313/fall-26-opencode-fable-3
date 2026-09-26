@@ -26,7 +26,8 @@ const monorepo = {
     main: "dist/index.js",
     devDependencies: { "@acme/api": "*", "@acme/core": "*" },
   }),
-  "packages/web/README.md": "# Web\n\n[![badge](x)](y)\n\nBrowser client for the Acme API.\nSecond line.\n\nLater paragraph.",
+  "packages/web/README.md":
+    "# Web\n\n[![badge](x)](y)\n\nBrowser client for the Acme API.\nSecond line.\n\nLater paragraph.",
   "examples/demo/package.json": json({ name: "@acme/demo" }),
   "node_modules/left-pad/package.json": json({ name: "left-pad" }),
   "docs/guide.md": "",
@@ -48,9 +49,7 @@ describe("WalkthroughAnalysis.analyze", () => {
 
   test("caps long export lists", () => {
     const exports = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`./m${i}`, `./m${i}.ts`]))
-    const overview = WalkthroughAnalysis.analyze(
-      snapshot({ "package.json": json({ name: "solo", exports }) }),
-    )
+    const overview = WalkthroughAnalysis.analyze(snapshot({ "package.json": json({ name: "solo", exports }) }))
     expect(overview.packages[0].entryPoints).toEqual(["exports: ./m0, ./m1, ./m2, ./m3, ./m4 (+3 more)"])
   })
 
@@ -92,9 +91,7 @@ describe("WalkthroughAnalysis.analyze", () => {
   })
 
   test("skips malformed manifests and returns no packages without a root manifest", () => {
-    const broken = WalkthroughAnalysis.analyze(
-      snapshot({ ...monorepo, "packages/web/package.json": "{ not json" }),
-    )
+    const broken = WalkthroughAnalysis.analyze(snapshot({ ...monorepo, "packages/web/package.json": "{ not json" }))
     expect(broken.packages.map((pkg) => pkg.name)).toEqual(["@acme/api", "@acme/core"])
     expect(WalkthroughAnalysis.analyze(snapshot({ "src/a.ts": "" })).packages).toEqual([])
   })
