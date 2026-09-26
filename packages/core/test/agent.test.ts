@@ -128,4 +128,23 @@ describe("AgentV2", () => {
       }
     }),
   )
+
+  it.effect("lets the explore agent run the read-only walkthrough tool", () =>
+    Effect.gen(function* () {
+      const agent = yield* AgentV2.Service
+      yield* AgentPlugin.Plugin.effect(host({ agent: agentHost(agent) })).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
+      )
+
+      const explore = yield* agent.get(AgentV2.ID.make("explore"))
+      expect(
+        explore?.permissions.some(
+          (rule) => rule.action === "walkthrough" && rule.resource === "*" && rule.effect === "allow",
+        ),
+      ).toBe(true)
+    }),
+  )
 })
