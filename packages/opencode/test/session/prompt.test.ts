@@ -628,6 +628,44 @@ it.instance("legacy prompt emits message events without session.next events", ()
   }),
 )
 
+it.instance("prompt records hint mode on each user message", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Hints" })
+
+    const enabled = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      hint: true,
+      parts: [{ type: "text", text: "help me" }],
+    })
+    const disabled = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      hint: false,
+      parts: [{ type: "text", text: "just do it" }],
+    })
+    const omitted = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "default" }],
+    })
+
+    const stored = yield* Effect.forEach([enabled, disabled, omitted], (message) =>
+      MessageV2.get({ sessionID: chat.id, messageID: message.info.id }),
+    )
+    expect(stored.map((message) => (message.info.role === "user" ? message.info.hint : "not-user"))).toEqual([
+      true,
+      false,
+      undefined,
+    ])
+  }),
+)
+
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

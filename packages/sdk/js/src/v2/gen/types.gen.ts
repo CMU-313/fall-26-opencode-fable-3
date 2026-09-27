@@ -256,6 +256,7 @@ export type UserMessage = {
     variant?: string
   }
   system?: string
+  hint?: boolean
   tools?: {
     [key: string]: boolean
   }
@@ -9806,6 +9807,7 @@ export type SessionPromptData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    hint?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -10153,6 +10155,7 @@ export type SessionPromptAsyncData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    hint?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {

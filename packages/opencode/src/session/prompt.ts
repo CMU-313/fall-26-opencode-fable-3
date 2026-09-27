@@ -666,6 +666,7 @@ const layer = Layer.effect(
           variant,
         },
         system: input.system,
+        hint: input.hint,
         format: input.format,
       }
 
@@ -1509,6 +1510,9 @@ export const PromptInput = Schema.Struct({
   format: Schema.optional(SessionV1.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
+  hint: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable Hint Mode for the response to this prompt",
+  }),
   parts: Schema.Array(
     Schema.Union([
       SessionV1.TextPartInput,
