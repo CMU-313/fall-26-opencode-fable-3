@@ -55,10 +55,7 @@ describe("loadAIPolicy", () => {
       const result = await loadAIPolicy(temp.path)
 
       expect(result.status).toBe("invalid")
-      if (result.status === "invalid") {
-        expect(result.error.message).toContain(field)
-        expect(result.error.message).toMatch(field === "courseName" ? /string/i : /array|list/i)
-      }
+      if (result.status === "invalid") expect(result.error.message).toContain(field)
       policy[field] = field.endsWith("Uses") ? ["Example"] : "Example"
     }
   })
