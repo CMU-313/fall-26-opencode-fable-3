@@ -350,6 +350,9 @@ export const User = Schema.Struct({
     variant: Schema.optional(Schema.String),
   }),
   system: Schema.optional(Schema.String),
+  hint: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether Hint Mode was enabled when this prompt was sent",
+  }),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
 }).annotate({ identifier: "UserMessage" })
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
