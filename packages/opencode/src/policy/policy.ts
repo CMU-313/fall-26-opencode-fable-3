@@ -5,38 +5,39 @@ const NonEmptyString = Schema.String.pipe(
   Schema.check(Schema.makeFilter((value) => (value.trim().length ? undefined : "must not be empty"))),
 )
 
-function strictStruct<const Fields extends Schema.Struct.Fields>(fields: Fields) {
-  const schema = Schema.StructWithRest(Schema.Struct(fields), [Schema.Record(Schema.String, Schema.Unknown)])
-  return schema.pipe(
-    Schema.check(
-      Schema.makeFilter<Schema.Schema.Type<typeof schema>>((value) => {
-        const known = new Set(Object.keys(schema.schema.fields))
-        return Object.keys(value)
-          .filter((key) => !known.has(key))
-          .map((key) => ({ path: [key], issue: `unknown field "${key}"` }))
-      }),
-    ),
-  )
+function unknownFields(value: Record<string, unknown>, fields: object) {
+  const known = new Set(Object.keys(fields))
+  return Object.keys(value)
+    .filter((key) => !known.has(key))
+    .map((key) => ({ path: [key], issue: `unknown field "${key}"` }))
 }
 
-const Contact = strictStruct({
+const ContactFields = {
   name: Schema.optional(NonEmptyString),
   email: Schema.optional(NonEmptyString),
-})
+}
+const ContactBase = Schema.Struct(ContactFields)
+const Contact = Schema.StructWithRest(ContactBase, [Schema.Record(Schema.String, Schema.Unknown)]).pipe(
+  Schema.check(Schema.makeFilter((value) => unknownFields(value, ContactFields))),
+)
 
 /**
  * The AI-use policy expected at `.opencode/ai-policy.json` in a student's project.
  * It identifies the course and assignment, summarizes the policy, lists allowed
  * and prohibited uses, and optionally provides a contact name and email.
  */
-export const AIPolicy = strictStruct({
+const AIPolicyFields = {
   courseName: NonEmptyString,
   assignmentName: NonEmptyString,
   summary: NonEmptyString,
   allowedUses: Schema.Array(NonEmptyString),
   prohibitedUses: Schema.Array(NonEmptyString),
   contact: Schema.optional(Contact),
-})
+}
+const AIPolicyBase = Schema.Struct(AIPolicyFields)
+export const AIPolicy = Schema.StructWithRest(AIPolicyBase, [Schema.Record(Schema.String, Schema.Unknown)]).pipe(
+  Schema.check(Schema.makeFilter((value) => unknownFields(value, AIPolicyFields))),
+)
 
 export type AIPolicy = Schema.Schema.Type<typeof AIPolicy>
 
