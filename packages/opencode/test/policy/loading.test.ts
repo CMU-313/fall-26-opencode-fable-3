@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { loadAIPolicy } from "../../src/policy/policy"
+import type { AIPolicy } from "../../src/policy/policy"
 import { tmpdir } from "../fixture/fixture"
 
 const fixturePath = `${import.meta.dir}/fixtures/ai-policy.json`
@@ -22,7 +23,7 @@ describe("loadAIPolicy", () => {
   test("loads a valid policy fixture", async () => {
     await using temp = await tmpdir()
     await writePolicy(temp.path, await Bun.file(fixturePath).text())
-    const fixture: unknown = JSON.parse(await Bun.file(fixturePath).text())
+    const fixture = JSON.parse(await Bun.file(fixturePath).text()) as AIPolicy
 
     await expect(loadAIPolicy(temp.path)).resolves.toEqual({ status: "loaded", policy: fixture })
   })

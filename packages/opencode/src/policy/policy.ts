@@ -40,7 +40,9 @@ export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLo
     return { status: "invalid", error }
   }
 
-  const result = Schema.decodeUnknownEither(AIPolicy)(parsed)
-  if (result._tag === "Left") return { status: "invalid", error: result.left }
-  return { status: "loaded", policy: result.right }
+  if (!Schema.is(AIPolicy)(parsed)) {
+    return { status: "invalid", error: new Error("Invalid AI policy format") }
+  }
+
+  return { status: "loaded", policy: parsed }
 }
