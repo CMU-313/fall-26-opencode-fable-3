@@ -175,6 +175,7 @@ export const Plugin = define({
               { action: "webfetch", resource: "*", effect: "allow" },
               { action: "websearch", resource: "*", effect: "allow" },
               { action: "read", resource: "*", effect: "allow" },
+              { action: "walkthrough", resource: "*", effect: "allow" },
             ],
             readonlyExternalDirectory,
           ),
