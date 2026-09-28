@@ -151,7 +151,7 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
-  loadAIPolicy: (directory: string) => Promise<PolicyLoadResult>
+  loadAIPolicy?: (directory: string) => Promise<PolicyLoadResult>
 }
 
 function errorMessage(error: unknown) {
@@ -369,7 +369,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 function App(props: {
   onSnapshot?: () => Promise<string[]>
   pluginHost: TuiPluginHost
-  loadAIPolicy: (directory: string) => Promise<PolicyLoadResult>
+  loadAIPolicy?: (directory: string) => Promise<PolicyLoadResult>
 }) {
   const startup = useTuiStartup()
   const tuiConfig = useTuiConfig()
@@ -782,7 +782,9 @@ function App(props: {
         title: "View AI-use policy",
         slashName: "policy",
         run: async () => {
-          const result = await props.loadAIPolicy(project.instance.directory())
+          const result = props.loadAIPolicy
+            ? await props.loadAIPolicy(project.instance.directory())
+            : { status: "not-found" as const }
           dialog.replace(() => <DialogPolicy result={result} />)
         },
         category: "System",
