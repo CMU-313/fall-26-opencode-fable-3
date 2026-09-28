@@ -666,6 +666,56 @@ it.instance("prompt records hint mode on each user message", () =>
   }),
 )
 
+it.instance(
+  "loop adds hint instructions only to turns prompted in hint mode",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Hints",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const turns = [
+        { text: "My binary search loops forever. Can you fix it?", hint: true },
+        { text: "Write a function that reverses a linked list.", hint: true },
+        { text: "Why does my recursive fibonacci exceed the max recursion depth?", hint: true },
+        { text: "Write a function that reverses a linked list.", hint: false },
+        { text: "Write a function that reverses a linked list.", hint: undefined },
+      ]
+
+      yield* Effect.forEach(
+        turns,
+        (turn) =>
+          Effect.gen(function* () {
+            yield* prompt.prompt({
+              sessionID: chat.id,
+              agent: "build",
+              noReply: true,
+              hint: turn.hint,
+              parts: [{ type: "text", text: turn.text }],
+            })
+            yield* llm.text("ok")
+            yield* prompt.loop({ sessionID: chat.id })
+          }),
+        { discard: true },
+      )
+
+      const bodies = (yield* llm.hits).map((hit) => JSON.stringify(hit.body))
+      // The full rules go in the system prompt and a short reminder goes next to the user's request.
+      expect(bodies.map((body) => body.includes("Hint Mode is active."))).toEqual([true, true, true, false, false])
+      expect(bodies.map((body) => body.includes("Hint Mode is on for this message."))).toEqual([
+        true,
+        true,
+        true,
+        false,
+        false,
+      ])
+    }),
+  30_000,
+)
+
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
