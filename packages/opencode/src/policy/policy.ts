@@ -1,23 +1,41 @@
-import { Schema } from "effect"
+import { Cause, Exit, Schema, SchemaIssue } from "effect"
 import path from "path"
+
+const NonEmptyString = Schema.String.pipe(
+  Schema.check(Schema.makeFilter((value) => (value.trim().length ? undefined : "must not be empty"))),
+)
+
+function strictStruct<const Fields extends Schema.Struct.Fields>(fields: Fields) {
+  const schema = Schema.StructWithRest(Schema.Struct(fields), [Schema.Record(Schema.String, Schema.Unknown)])
+  return schema.pipe(
+    Schema.check(
+      Schema.makeFilter<Schema.Schema.Type<typeof schema>>((value) => {
+        const known = new Set(Object.keys(schema.schema.fields))
+        return Object.keys(value)
+          .filter((key) => !known.has(key))
+          .map((key) => ({ path: [key], issue: `unknown field "${key}"` }))
+      }),
+    ),
+  )
+}
+
+const Contact = strictStruct({
+  name: Schema.optional(NonEmptyString),
+  email: Schema.optional(NonEmptyString),
+})
 
 /**
  * The AI-use policy expected at `.opencode/ai-policy.json` in a student's project.
  * It identifies the course and assignment, summarizes the policy, lists allowed
  * and prohibited uses, and optionally provides a contact name and email.
  */
-export const AIPolicy = Schema.Struct({
-  courseName: Schema.String,
-  assignmentName: Schema.String,
-  summary: Schema.String,
-  allowedUses: Schema.Array(Schema.String),
-  prohibitedUses: Schema.Array(Schema.String),
-  contact: Schema.optional(
-    Schema.Struct({
-      name: Schema.optional(Schema.String),
-      email: Schema.optional(Schema.String),
-    }),
-  ),
+export const AIPolicy = strictStruct({
+  courseName: NonEmptyString,
+  assignmentName: NonEmptyString,
+  summary: NonEmptyString,
+  allowedUses: Schema.Array(NonEmptyString),
+  prohibitedUses: Schema.Array(NonEmptyString),
+  contact: Schema.optional(Contact),
 })
 
 export type AIPolicy = Schema.Schema.Type<typeof AIPolicy>
@@ -25,7 +43,21 @@ export type AIPolicy = Schema.Schema.Type<typeof AIPolicy>
 export type AIPolicyLoadResult =
   | { status: "not-found" }
   | { status: "loaded"; policy: AIPolicy }
-  | { status: "invalid"; error: unknown }
+  | { status: "invalid"; error: Error }
+
+export function formatAIPolicyError(pathname: string, error: unknown, kind: "json" | "schema") {
+  const detail = error instanceof Error ? error.message : String(error)
+  if (kind === "json") return `Invalid AI policy in ${pathname}:\n  - file is not valid JSON: ${detail}`
+
+  const issues = Schema.isSchemaError(error)
+    ? SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues
+    : [{ message: detail, path: [] }]
+  const messages = issues.map((issue) => {
+    const field = issue.path?.map(String).join(".") || "policy"
+    return `  - ${field}: ${issue.message}`
+  })
+  return `Invalid AI policy in ${pathname}:\n${messages.join("\n")}`
+}
 
 export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLoadResult> {
   const policyPath = path.join(projectDirectory, ".opencode", "ai-policy.json")
@@ -35,14 +67,17 @@ export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLo
 
   let parsed: unknown
   try {
-    parsed = JSON.parse(await file.text())
+    const text = await file.text()
+    parsed = JSON.parse(text)
   } catch (error) {
-    return { status: "invalid", error }
+    return { status: "invalid", error: new Error(formatAIPolicyError(policyPath, error, "json"), { cause: error }) }
   }
 
-  if (!Schema.is(AIPolicy)(parsed)) {
-    return { status: "invalid", error: new Error("Invalid AI policy format") }
+  const decoded = Schema.decodeUnknownExit(AIPolicy)(parsed, { errors: "all", propertyOrder: "original" })
+  if (Exit.isFailure(decoded)) {
+    const error = Cause.squash(decoded.cause)
+    return { status: "invalid", error: new Error(formatAIPolicyError(policyPath, error, "schema"), { cause: error }) }
   }
 
-  return { status: "loaded", policy: parsed }
+  return { status: "loaded", policy: decoded.value }
 }
