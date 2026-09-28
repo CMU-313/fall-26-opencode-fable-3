@@ -44,6 +44,7 @@ import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogDebug } from "./component/dialog-debug"
+import { DialogPolicy } from "./component/dialog-policy"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -82,6 +83,7 @@ import {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
+import type { PolicyLoadResult } from "./policy"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
@@ -149,6 +151,7 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
+  loadAIPolicy: (directory: string) => Promise<PolicyLoadResult>
 }
 
 function errorMessage(error: unknown) {
@@ -318,6 +321,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                     <App
                                                                       onSnapshot={input.onSnapshot}
                                                                       pluginHost={input.pluginHost}
+                                                                      loadAIPolicy={input.loadAIPolicy}
                                                                     />
                                                                   </LocationProvider>
                                                                 </EditorContextProvider>
@@ -362,7 +366,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost }) {
+function App(props: {
+  onSnapshot?: () => Promise<string[]>
+  pluginHost: TuiPluginHost
+  loadAIPolicy: (directory: string) => Promise<PolicyLoadResult>
+}) {
   const startup = useTuiStartup()
   const tuiConfig = useTuiConfig()
   const route = useRoute()
@@ -766,6 +774,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "status",
         run: () => {
           dialog.replace(() => <DialogStatus />)
+        },
+        category: "System",
+      },
+      {
+        name: "opencode.policy",
+        title: "View AI-use policy",
+        slashName: "policy",
+        run: async () => {
+          const result = await props.loadAIPolicy(project.instance.directory())
+          dialog.replace(() => <DialogPolicy result={result} />)
         },
         category: "System",
       },
