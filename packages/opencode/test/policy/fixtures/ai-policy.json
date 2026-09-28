@@ -1,0 +1,18 @@
+{
+  "courseName": "Introduction to Software Engineering",
+  "assignmentName": "OpenCode Feature Project",
+  "summary": "Use AI tools to support learning while remaining responsible for submitted work.",
+  "allowedUses": [
+    "Brainstorming implementation approaches",
+    "Explaining unfamiliar error messages",
+    "Reviewing code for clarity"
+  ],
+  "prohibitedUses": [
+    "Submitting AI-generated work without review",
+    "Using AI to impersonate a teammate"
+  ],
+  "contact": {
+    "name": "Course Staff",
+    "email": "course-staff@example.edu"
+  }
+}
