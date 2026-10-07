@@ -83,7 +83,7 @@ import {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
-import type { PolicyLoadResult } from "./policy"
+import { buildPolicyNotification, type PolicyLoadResult } from "./policy"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
@@ -485,6 +485,19 @@ function App(props: {
 
   const args = useArgs()
   onMount(() => {
+    if (props.loadAIPolicy) {
+      const directory = project.instance.directory()
+      void props
+        .loadAIPolicy(directory)
+        .then((result) => {
+          const notification = buildPolicyNotification(result)
+          if (notification) toast.show(notification)
+        })
+        .catch((error) => {
+          console.debug("Failed to load AI-use policy", error)
+        })
+    }
+
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {

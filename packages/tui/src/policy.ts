@@ -15,6 +15,26 @@ export type PolicyLoadResult =
   | { status: "loaded"; policy: Policy }
   | { status: "invalid"; errors: readonly string[] }
 
+export type PolicyNotification = {
+  message: string
+  variant: "info" | "warning"
+}
+
+export function buildPolicyNotification(result: PolicyLoadResult): PolicyNotification | undefined {
+  if (result.status === "not-found") return
+  if (result.status === "invalid") {
+    return {
+      message: "AI-use policy file is invalid. Run /policy for details",
+      variant: "warning",
+    }
+  }
+
+  return {
+    message: `AI-use policy: ${result.policy.courseName} · ${result.policy.assignmentName}. Run /policy to view`,
+    variant: "info",
+  }
+}
+
 export type PolicyDisplay =
   | { status: "empty"; message: string }
   | { status: "invalid"; errors: readonly string[] }
