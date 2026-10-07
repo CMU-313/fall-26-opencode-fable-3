@@ -271,6 +271,7 @@ export const TuiThreadCommand = cmd({
         const { run } = await import("../tui/layer")
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
         const { loadAIPolicy } = await import("@/policy/policy")
+        const { mapAIPolicyLoadResult } = await import("@/policy/tui")
         await Effect.runPromise(
           run({
             url: transport.url,
@@ -282,10 +283,7 @@ export const TuiThreadCommand = cmd({
             config,
             pluginHost: createLegacyTuiPluginHost(),
             async loadAIPolicy(directory) {
-              const result = await loadAIPolicy(directory)
-              if (result.status === "not-found") return result
-              if (result.status === "loaded") return result
-              return { status: "invalid", errors: result.error.message.split("\n").filter(Boolean) }
+              return mapAIPolicyLoadResult(await loadAIPolicy(directory))
             },
             directory: cwd,
             fetch: transport.fetch,
