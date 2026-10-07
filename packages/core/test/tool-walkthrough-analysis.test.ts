@@ -115,6 +115,34 @@ describe("WalkthroughAnalysis.wanted", () => {
   })
 })
 
+describe("WalkthroughAnalysis.render without packages", () => {
+  const render = (tree: Record<string, string>) =>
+    WalkthroughAnalysis.render(WalkthroughAnalysis.analyze(snapshot(tree)))
+
+  test("says so when there is no package.json, and still lists directories and docs", () => {
+    const text = render({ "README.md": "# hi", "src/main.go": "", "src/util.go": "" })
+    expect(text).toContain("No packages detected from package.json files")
+    expect(text).toContain("Docs: README.md")
+    expect(text).toContain("- src/ (2 files)")
+    expect(text).not.toContain("## Packages")
+  })
+
+  test("says so for nested manifests without a root manifest", () => {
+    const text = render({ "packages/a/package.json": json({ name: "a" }), "src/x.ts": "" })
+    expect(text).toContain("No packages detected")
+  })
+
+  test("does not crash on an empty repository", () => {
+    expect(render({})).toBe(
+      "# Repository\n\nNo packages detected from package.json files; showing directory layout only.",
+    )
+  })
+
+  test("omits the note when packages are found", () => {
+    expect(render(monorepo)).not.toContain("No packages detected")
+  })
+})
+
 describe("WalkthroughAnalysis.render", () => {
   test("outlines packages, dependencies and directories", () => {
     const text = WalkthroughAnalysis.render(WalkthroughAnalysis.analyze(snapshot(monorepo)))

@@ -180,6 +180,8 @@ export const render = (overview: Overview) => {
       if (pkg.entryPoints.length > 0) lines.push(`  entry: ${pkg.entryPoints.join("; ")}`)
       if (pkg.dependsOn.length > 0) lines.push(`  depends on: ${pkg.dependsOn.join(", ")}`)
     }
+  } else {
+    lines.push("", "No packages detected from package.json files; showing directory layout only.")
   }
   if (overview.topLevel.length > 0) {
     lines.push("", "## Top-level directories")
