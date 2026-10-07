@@ -25,6 +25,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
     started = resolve
   })
   let disposes = 0
+  let policyLoads = 0
 
   try {
     const { run } = await import("../src/app")
@@ -44,15 +45,21 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
             disposes++
           },
         },
+        loadAIPolicy: async () => {
+          policyLoads++
+          return { status: "not-found" }
+        },
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
     )
     await ready
+    await setup.renderOnce()
     process.emit("SIGHUP")
     await task
 
     expect(setup.renderer.isDestroyed).toBe(true)
     expect(titles.at(-1)).toBe("")
     expect(disposes).toBe(1)
+    expect(policyLoads).toBe(1)
     expect(process.listeners("SIGHUP").every((listener) => listeners.has(listener))).toBe(true)
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()

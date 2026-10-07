@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildPolicyDisplay, type PolicyLoadResult } from "../src/policy"
+import { buildPolicyDisplay, buildPolicyNotification, type PolicyLoadResult } from "../src/policy"
 
 const policy = {
   courseName: "Introduction to Software Engineering",
@@ -67,5 +67,30 @@ describe("buildPolicyDisplay", () => {
 
     expect(result.status).toBe("loaded")
     if (result.status === "loaded") expect(result.summary).toBe(longSummary)
+  })
+})
+
+describe("buildPolicyNotification", () => {
+  test("notifies with the course and assignment for a loaded policy", () => {
+    expect(buildPolicyNotification({ status: "loaded", policy })).toEqual({
+      message: "AI-use policy: Introduction to Software Engineering · OpenCode Feature Project. Run /policy to view",
+      variant: "info",
+    })
+  })
+
+  test("does not notify when no policy is configured", () => {
+    expect(buildPolicyNotification({ status: "not-found" })).toBeUndefined()
+  })
+
+  test("warns when the policy is invalid", () => {
+    expect(
+      buildPolicyNotification({
+        status: "invalid",
+        errors: ["Invalid AI policy in .opencode/ai-policy.json"],
+      }),
+    ).toEqual({
+      message: "AI-use policy file is invalid. Run /policy for details",
+      variant: "warning",
+    })
   })
 })
