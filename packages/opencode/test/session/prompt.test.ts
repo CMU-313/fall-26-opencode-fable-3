@@ -628,6 +628,193 @@ it.instance("legacy prompt emits message events without session.next events", ()
   }),
 )
 
+it.instance("prompt records hint mode on each user message", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Hints" })
+
+    const enabled = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      hint: true,
+      parts: [{ type: "text", text: "help me" }],
+    })
+    const disabled = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      hint: false,
+      parts: [{ type: "text", text: "just do it" }],
+    })
+    const omitted = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "default" }],
+    })
+
+    const stored = yield* Effect.forEach([enabled, disabled, omitted], (message) =>
+      MessageV2.get({ sessionID: chat.id, messageID: message.info.id }),
+    )
+    expect(stored.map((message) => (message.info.role === "user" ? message.info.hint : "not-user"))).toEqual([
+      true,
+      false,
+      undefined,
+    ])
+  }),
+)
+
+it.instance(
+  "loop adds hint instructions only to turns prompted in hint mode",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Hints",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const turns = [
+        { text: "My binary search loops forever. Can you fix it?", hint: true },
+        { text: "Write a function that reverses a linked list.", hint: true },
+        { text: "Why does my recursive fibonacci exceed the max recursion depth?", hint: true },
+        { text: "Write a function that reverses a linked list.", hint: false },
+        { text: "Write a function that reverses a linked list.", hint: undefined },
+      ]
+
+      yield* Effect.forEach(
+        turns,
+        (turn) =>
+          Effect.gen(function* () {
+            yield* prompt.prompt({
+              sessionID: chat.id,
+              agent: "build",
+              noReply: true,
+              hint: turn.hint,
+              parts: [{ type: "text", text: turn.text }],
+            })
+            yield* llm.text("ok")
+            yield* prompt.loop({ sessionID: chat.id })
+          }),
+        { discard: true },
+      )
+
+      const bodies = (yield* llm.hits).map((hit) => JSON.stringify(hit.body))
+      // The full rules go in the system prompt and a short reminder goes next to the user's request.
+      expect(bodies.map((body) => body.includes("Hint Mode is active."))).toEqual([true, true, true, false, false])
+      expect(bodies.map((body) => body.includes("Hint Mode is on for this message."))).toEqual([
+        true,
+        true,
+        true,
+        false,
+        false,
+      ])
+    }),
+  30_000,
+)
+
+it.instance(
+  "loop raises the hint level for each request for another hint",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Hint levels",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const turns = [
+        "My binary search loops forever. Can you fix it?",
+        "Can I get another hint?",
+        "I'm still stuck",
+        "Can you be more specific?",
+        "another hint please",
+        "Write a function that reverses a linked list.",
+      ]
+
+      yield* Effect.forEach(
+        turns,
+        (text) =>
+          Effect.gen(function* () {
+            yield* prompt.prompt({
+              sessionID: chat.id,
+              agent: "build",
+              noReply: true,
+              hint: true,
+              parts: [{ type: "text", text }],
+            })
+            yield* llm.text("ok")
+            yield* prompt.loop({ sessionID: chat.id })
+          }),
+        { discard: true },
+      )
+
+      // Only the latest prompt carries the reminder, so each request names exactly one level.
+      const levels = (yield* llm.hits).map((hit) => JSON.stringify(hit.body).match(/Hint level \d of \d/g))
+      expect(levels).toEqual([
+        ["Hint level 1 of 4"],
+        ["Hint level 2 of 4"],
+        ["Hint level 3 of 4"],
+        ["Hint level 4 of 4"],
+        ["Hint level 4 of 4"],
+        ["Hint level 1 of 4"],
+      ])
+    }),
+  30_000,
+)
+
+it.instance(
+  "loop gives the full solution only when asked for it after hints",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Hint to solution",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const turns = [
+        { text: "Give me the full solution to my binary search bug.", reply: "First hint: what if lo equals mid?" },
+        { text: "Can I get another hint?", reply: "Second hint: look at the lo = mid line." },
+        { text: "Okay, show me the full solution", reply: "Here is the full solution." },
+        { text: "Write a function that reverses a linked list.", reply: "What does each node point to?" },
+      ]
+
+      yield* Effect.forEach(
+        turns,
+        (turn) =>
+          Effect.gen(function* () {
+            yield* prompt.prompt({
+              sessionID: chat.id,
+              agent: "build",
+              noReply: true,
+              hint: true,
+              parts: [{ type: "text", text: turn.text }],
+            })
+            yield* llm.text(turn.reply)
+            yield* prompt.loop({ sessionID: chat.id })
+          }),
+        { discard: true },
+      )
+
+      const bodies = (yield* llm.hits).map((hit) => JSON.stringify(hit.body))
+      expect(
+        bodies.map((body) =>
+          body.includes("explicitly asked for the full solution") ? "solution" : body.match(/Hint level \d of \d/g),
+        ),
+      ).toEqual([["Hint level 1 of 4"], ["Hint level 2 of 4"], "solution", ["Hint level 1 of 4"]])
+      // The solution request still carries the earlier hints, so the answer can build on them.
+      expect(bodies[2]).toContain("First hint: what if lo equals mid?")
+      expect(bodies[2]).toContain("Second hint: look at the lo = mid line.")
+    }),
+  30_000,
+)
+
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

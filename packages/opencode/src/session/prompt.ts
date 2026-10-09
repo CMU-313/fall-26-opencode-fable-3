@@ -17,6 +17,7 @@ import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
+import PROMPT_HINT from "./prompt/hint.txt"
 import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
@@ -666,6 +667,7 @@ const layer = Layer.effect(
           variant,
         },
         system: input.system,
+        hint: input.hint,
         format: input.format,
       }
 
@@ -1266,6 +1268,8 @@ const layer = Layer.effect(
               ...instructions,
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
+              // Hint Mode is chosen per prompt, so it follows the latest user message for the whole turn.
+              ...(lastUser.hint ? [PROMPT_HINT] : []),
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1509,6 +1513,9 @@ export const PromptInput = Schema.Struct({
   format: Schema.optional(SessionV1.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
+  hint: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable Hint Mode for the response to this prompt",
+  }),
   parts: Schema.Array(
     Schema.Union([
       SessionV1.TextPartInput,

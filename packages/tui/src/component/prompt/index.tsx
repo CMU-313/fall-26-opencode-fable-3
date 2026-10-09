@@ -47,6 +47,7 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
+import { useHintMode } from "../../context/hint"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
@@ -171,6 +172,7 @@ export function Prompt(props: PromptProps) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const hint = useHintMode()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -510,6 +512,17 @@ export function Prompt(props: PromptProps) {
           })
           restoreExtmarksFromParts(updatedNonTextParts)
           input.cursorOffset = Bun.stringWidth(normalized)
+        },
+      },
+      {
+        title: hint.enabled() ? "Disable hint mode" : "Enable hint mode",
+        desc: "Ask for hints instead of full solutions",
+        name: "prompt.hint.toggle",
+        category: "Prompt",
+        slashName: "hint",
+        run: () => {
+          hint.toggle()
+          dialog.clear()
         },
       },
       {
@@ -1099,6 +1112,7 @@ export function Prompt(props: PromptProps) {
             agent: agent.name,
             model: selectedModel,
             variant,
+            hint: hint.enabled() || undefined,
             parts: [
               ...editorParts,
               {
@@ -1451,6 +1465,9 @@ export function Prompt(props: PromptProps) {
                       </text>
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
                         <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                      </Show>
+                      <Show when={store.mode === "normal" && hint.enabled()}>
+                        <text fg={fadeColor(theme.accent, agentMetaAlpha())}>hint</text>
                       </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
