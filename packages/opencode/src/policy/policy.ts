@@ -64,13 +64,13 @@ export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLo
   const policyPath = path.join(projectDirectory, ".opencode", "ai-policy.json")
   const file = Bun.file(policyPath)
 
-  if (!(await file.exists())) return { status: "not-found" }
-
   let parsed: unknown
   try {
     const text = await file.text()
     parsed = JSON.parse(text)
   } catch (error) {
+    // Read directly: Bun.file().exists() also returns false for directories.
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return { status: "not-found" }
     return { status: "invalid", error: new Error(formatAIPolicyError(policyPath, error, "json"), { cause: error }) }
   }
 
