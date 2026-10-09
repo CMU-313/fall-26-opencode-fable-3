@@ -47,7 +47,7 @@ describe("AI policy workflow", () => {
     })
   })
 
-  test("omits contact from display content when the real policy has no contact", async () => {
+  test("produces no contact entries when the real policy has no contact", async () => {
     await using temp = await tmpdir()
     const policy = JSON.parse(await Bun.file(fixturePath).text()) as Record<string, unknown>
     delete policy.contact
@@ -57,9 +57,12 @@ describe("AI policy workflow", () => {
     const display = buildPolicyDisplay(result)
 
     expect(display.status).toBe("loaded")
-    if (display.status === "loaded") expect(display.contact).toEqual([])
-    expect(JSON.stringify(display)).not.toContain("contact")
-    expect(JSON.stringify(buildPolicyNotification(result))).not.toContain("contact")
+    if (display.status !== "loaded") throw new Error("Expected loaded policy")
+    expect(display.contact).toEqual([])
+    expect(buildPolicyNotification(result)).toEqual({
+      message: "AI-use policy: Introduction to Software Engineering · OpenCode Feature Project. Run /policy to view",
+      variant: "info",
+    })
   })
 
   test("shows the empty state without a policy directory or file", async () => {
@@ -85,6 +88,7 @@ describe("AI policy workflow", () => {
     const result = await loadPolicy(temp.path)
 
     expect(result.status).toBe("invalid")
+    if (result.status !== "invalid") throw new Error("Expected invalid policy")
     expect(buildPolicyDisplay(result)).toEqual(result)
     expect(buildPolicyDisplay(result)).toMatchObject({ status: "invalid" })
     expect(buildPolicyNotification(result)).toEqual({
@@ -136,8 +140,9 @@ describe("AI policy workflow", () => {
       const result = await loadPolicy(temp.path)
 
       expect(result.status).toBe("invalid")
+      if (result.status !== "invalid") throw new Error("Expected invalid policy")
       expect(buildPolicyDisplay(result)).toEqual(result)
-      if (result.status === "invalid") expect(result.errors.join("\n")).toContain(testCase.field)
+      expect(result.errors.join("\n")).toContain(testCase.field)
     }
   })
 
@@ -149,6 +154,7 @@ describe("AI policy workflow", () => {
       const result = await loadPolicy(temp.path)
 
       expect(result.status).toBe("invalid")
+      if (result.status !== "invalid") throw new Error("Expected invalid policy")
       expect(buildPolicyDisplay(result)).toEqual(result)
       expect(buildPolicyNotification(result)?.variant).toBe("warning")
     }
@@ -181,6 +187,7 @@ describe("AI policy workflow", () => {
     const result = await loadPolicy(temp.path)
 
     expect(result.status).toBe("invalid")
+    if (result.status !== "invalid") throw new Error("Expected invalid policy")
     expect(buildPolicyDisplay(result)).toEqual(result)
     expect(buildPolicyNotification(result)?.variant).toBe("warning")
   })
