@@ -716,6 +716,57 @@ it.instance(
   30_000,
 )
 
+it.instance(
+  "loop raises the hint level for each request for another hint",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Hint levels",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const turns = [
+        "My binary search loops forever. Can you fix it?",
+        "Can I get another hint?",
+        "I'm still stuck",
+        "Can you be more specific?",
+        "another hint please",
+        "Write a function that reverses a linked list.",
+      ]
+
+      yield* Effect.forEach(
+        turns,
+        (text) =>
+          Effect.gen(function* () {
+            yield* prompt.prompt({
+              sessionID: chat.id,
+              agent: "build",
+              noReply: true,
+              hint: true,
+              parts: [{ type: "text", text }],
+            })
+            yield* llm.text("ok")
+            yield* prompt.loop({ sessionID: chat.id })
+          }),
+        { discard: true },
+      )
+
+      // Only the latest prompt carries the reminder, so each request names exactly one level.
+      const levels = (yield* llm.hits).map((hit) => JSON.stringify(hit.body).match(/Hint level \d of \d/g))
+      expect(levels).toEqual([
+        ["Hint level 1 of 4"],
+        ["Hint level 2 of 4"],
+        ["Hint level 3 of 4"],
+        ["Hint level 4 of 4"],
+        ["Hint level 4 of 4"],
+        ["Hint level 1 of 4"],
+      ])
+    }),
+  30_000,
+)
+
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
