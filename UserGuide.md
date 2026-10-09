@@ -179,13 +179,13 @@ Why we believe this is enough: the parts that decide behavior are deterministic.
 - `packages/tui` is not in the list of packages that `bun turbo test` runs in CI (see `turbo.json` and `TESTING.md`), so `hint.test.tsx` only runs locally. The `opencode` tests do run in CI.
 
 ## AI-Use Policy Awareness (Truanne)
-
+ 
 Lets instructors include their AI-use policy in an assignment repo so students see it when they open the project in OpenCode and can read the full policy at any time.
-
+ 
 ### For instructors: adding a policy
-
+ 
 Create `.opencode/ai-policy.json` in the root of the assignment's starter repo:
-
+ 
 ```json
 {
   "courseName": "17-313 Foundations of Software Engineering",
@@ -196,52 +196,78 @@ Create `.opencode/ai-policy.json` in the root of the assignment's starter repo:
   "contact": { "name": "Course Staff", "email": "staff@example.edu" }
 }
 ```
-
+ 
 | Field | Required | Notes |
 |---|---|---|
 | courseName, assignmentName, summary | Yes | Non-empty text |
 | allowedUses, prohibitedUses | Yes | Lists of text; may be empty |
 | contact | No | `name` and `email` are both optional |
-
+ 
 Unknown fields are rejected, so typos like `allowedUse` are caught. Students receive the policy when they clone or pull the repo. Edits show up the next time `/policy` is run or OpenCode is opened.
-
+ 
 ### For students: viewing the policy
-
+ 
 - **On startup:** if the project has a policy, a short notification names the course and assignment. [Select "View policy" / Run `/policy`] to open it. It does not block typing.
 - **Anytime:** run `/policy` to see the full policy. Allowed and prohibited uses are listed in separate labeled sections. Press Esc to close.
 - **No policy:** no notification appears and OpenCode works normally. `/policy` explains that no policy is configured.
 - **Invalid policy:** a warning appears on startup, and `/policy` lists what's wrong with the file (which field, and the problem).
-
 This feature is advisory. It helps students avoid *unintentionally* violating a policy; it does not enforce or block anything.
-
+ 
 ### How to user test it
-
-1. Run OpenCode from source: `[exact command from repo root]`, pointing it at a test project folder.
-2. **Valid policy:** add the example file above to `<test project>/.opencode/`. Launch. Expect a notification naming the course and assignment. Open the policy and check that all fields appear, with allowed and prohibited uses separate.
-3. **No contact:** remove `contact`, run `/policy`. The contact section is gone.
-4. **No policy:** delete the file and relaunch. Expect no notification; `/policy` shows the empty state.
-5. **Invalid policy:** delete `courseName` and relaunch. Expect a warning; `/policy` says `courseName` is missing. Also try broken JSON (delete a closing brace) and an empty file. OpenCode should keep working in all cases.
-6. **Long text:** paste a long paragraph into `summary`. It wraps and the dialog scrolls with the keyboard.
-
+ 
+1. **Set up a test project.** From any folder, create a test project with the example policy:
+```bash
+   mkdir -p ~/policy-demo/.opencode
+   cat > ~/policy-demo/.opencode/ai-policy.json <<'JSON'
+   {
+     "courseName": "17-313 Foundations of Software Engineering",
+     "assignmentName": "Project 2",
+     "summary": "AI may help with understanding code, but you must write your own implementation.",
+     "allowedUses": ["Explaining unfamiliar code", "Debugging help"],
+     "prohibitedUses": ["Generating complete solutions", "Writing reflection answers"],
+     "contact": { "name": "Course Staff", "email": "staff@example.edu" }
+   }
+   JSON
+```
+ 
+2. **Start OpenCode in that folder.** From the repository root (not `packages/`), install dependencies and launch:
+```bash
+   bun install
+   bun dev ~/policy-demo
+```
+ 
+   Use `bun dev` rather than running `src/index.ts` directly from the repo root. Launched from the root, the TUI fails with `Cannot find package 'react'`, because its JSX setup only loads when Bun runs inside `packages/opencode`, which `bun dev` does for you. To restart OpenCode in the steps below, press `ctrl+c` twice and run `bun dev ~/policy-demo` again.
+ 
+3. **Valid policy:** expect a notification naming the course and assignment. Open the policy and check that all fields appear, with allowed and prohibited uses in separate sections.
+4. **No contact:** remove `contact` from `~/policy-demo/.opencode/ai-policy.json` and run `/policy` again. The contact section is gone, with no restart needed.
+5. **Long text:** paste a long paragraph into `summary` and run `/policy`. It wraps, and the dialog scrolls with the keyboard.
+6. **Invalid policy:** delete `courseName` and restart. Expect a warning; `/policy` says `courseName` is missing. Also try broken JSON (delete a closing brace) and an empty file. OpenCode should keep working in all cases.
+7. **No policy:** delete `~/policy-demo/.opencode/ai-policy.json` and restart. Expect no notification; `/policy` shows the empty state.
 ### Automated tests
-
+ 
 | What | Location |
 |---|---|
-| Schema (required/optional fields, types) | `[packages/opencode/test/policy/policy.test.ts]` and `[packages/opencode/test/policy/loading.test.ts]` |
-| Loading (found / not found / invalid) | `[packages/opencode/test/policy/loading.test.ts]` |
-| Validation error messages | `[packages/opencode/test/policy/loading.test.ts]` |
-| Dialog content (`/policy`) | `[packages/tui/test/policy/display.test.ts]` |
-| Startup notification | `[packages/tui/test/policy.test.ts]` |
-| End-to-end integration | `[packages/opencode/test/policy/integration.test.ts]` |
-| Shared fixtures | `[packages/opencode/test/policy/fixtures/ai-policy.json]` and `[packages/opencode/test/policy/fixtures/malformed.json]` |
-
-Run them with `[bun run --cwd packages/opencode test test/policy]` and `[bun run --cwd packages/tui test test/policy.test.ts]`. They also run in CI on every PR.
-
+| Schema (required/optional fields, types) | `packages/opencode/test/policy/policy.test.ts` and `packages/opencode/test/policy/loading.test.ts` |
+| Loading (found / not found / invalid) | `packages/opencode/test/policy/loading.test.ts` |
+| Validation error messages | `packages/opencode/test/policy/loading.test.ts` |
+| Dialog content (`/policy`) | `packages/tui/test/policy/display.test.ts` |
+| Startup notification | `packages/tui/test/policy.test.ts` |
+| End-to-end integration | `packages/opencode/test/policy/integration.test.ts` |
+| Shared fixtures | `packages/opencode/test/policy/fixtures/ai-policy.json` and `packages/opencode/test/policy/fixtures/malformed.json` |
+ 
+Run them from the repository root:
+ 
+```bash
+bun run --cwd packages/opencode test test/policy
+bun run --cwd packages/tui test test/policy.test.ts test/policy/display.test.ts
+```
+ 
+The `packages/opencode` tests, including the integration tests, run in CI on every PR. `packages/tui` is not in the list of packages CI tests (see the note in the Hint Mode section), so the dialog and startup notification unit tests only run locally. The integration tests in `packages/opencode` cover the same dialog content and notification logic through the real chain, so that behavior is still checked in CI.
+ 
 **What they cover:** Unit tests check each piece: the schema accepts valid policies and rejects missing fields, wrong types, empty strings, and unknown keys; the loader distinguishes "no policy", "loaded", and "invalid" without throwing; validation messages name the field; the dialog content builder shows each field in the right section and omits contact when absent; and the startup logic shows a notification only for valid policies, a warning for invalid ones, and nothing when there is no policy.
-
+ 
 The integration tests run the real chain, from a policy file on disk through the loader and the opencode-to-TUI mapping to what the dialog and notification show, for valid, missing, malformed, incomplete, empty, and long policies.
-
-**Why we think this is sufficient:** every acceptance criterion from our issues maps to at least one test, and every failure mode we could think of
-(no file, bad JSON, bad fields, unreadable file) is tested to confirm it doesn't crash OpenCode. The integration tests specifically cover the boundary between the `opencode` and `tui` packages, where the pieces could break even if each one passes its own tests.
-
-**Limits:** the tests check *what content* is shown, not how it looks on screen. Visual layout, theme colors, and keyboard scrolling were verified by hand using the user testing steps above. [Edit if your integration tests render the dialog with a test renderer.]
+ 
+**Why we think this is sufficient:** every acceptance criterion from our issues maps to at least one test, and every failure mode we could think of (no file, bad JSON, bad fields, unreadable file) is tested to confirm it doesn't crash OpenCode. The integration tests specifically cover the boundary between the `opencode` and `tui` packages, where the pieces could break even if each one passes its own tests.
+ 
+**Limits:** the tests check *what content* is shown, not how it looks on screen. Visual layout, theme colors, and keyboard scrolling were verified by hand using the user testing steps above.
