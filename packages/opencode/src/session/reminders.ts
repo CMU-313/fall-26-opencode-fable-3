@@ -11,7 +11,7 @@ import { Session } from "./session"
 import PROMPT_PLAN from "./prompt/plan.txt"
 import BUILD_SWITCH from "./prompt/build-switch.txt"
 import PLAN_MODE from "./prompt/plan-mode.txt"
-import HINT_REMINDER from "./prompt/hint-reminder.txt"
+import { SessionHint } from "./hint"
 
 export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   messages: SessionV1.WithParts[]
@@ -32,7 +32,7 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
       messageID: userMessage.info.id,
       sessionID: userMessage.info.sessionID,
       type: "text",
-      text: HINT_REMINDER,
+      text: SessionHint.reminder(input.messages),
       synthetic: true,
     })
   }
