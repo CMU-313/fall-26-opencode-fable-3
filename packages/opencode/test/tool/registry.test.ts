@@ -109,6 +109,15 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("exposes walkthrough in the live tool list", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("walkthrough")
+    }),
+  )
+
   it.instance("does not expose execute unless code mode is enabled", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
