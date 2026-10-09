@@ -205,6 +205,7 @@ const layer = Layer.effect(
                 bash: "allow",
                 webfetch: "allow",
                 websearch: "allow",
+                walkthrough: "allow",
                 read: "allow",
                 external_directory: readonlyExternalDirectory,
               }),

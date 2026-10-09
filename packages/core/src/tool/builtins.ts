@@ -11,6 +11,7 @@ import { QuestionTool } from "./question"
 import { ReadTool } from "./read"
 import { SkillTool } from "./skill"
 import { TodoWriteTool } from "./todowrite"
+import { WalkthroughTool } from "./walkthrough"
 import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
@@ -41,6 +42,7 @@ export const node = makeLocationNode({
     ReadTool.node,
     SkillTool.node,
     TodoWriteTool.node,
+    WalkthroughTool.node,
     WebFetchTool.node,
     WebSearchTool.node,
     WriteTool.node,
