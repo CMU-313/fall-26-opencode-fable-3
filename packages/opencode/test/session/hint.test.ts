@@ -75,3 +75,56 @@ describe("SessionHint.level", () => {
     expect(SessionHint.level([another])).toBe(1)
   })
 })
+
+describe("SessionHint.isSolutionRequest", () => {
+  test("recognizes explicit requests for the full solution", () => {
+    expect(
+      [
+        "Show me the full solution",
+        "Can you give me the complete answer?",
+        "please just tell me the answer",
+        "Just show me the code",
+        "Okay, give me the solution.",
+        "Reveal the answer",
+        "I give up",
+        "full solution please",
+        "write the complete code for me",
+      ].filter((text) => !SessionHint.isSolutionRequest(text)),
+    ).toEqual([])
+  })
+
+  test("does not treat questions or hint requests as solution requests", () => {
+    expect(
+      [
+        "My binary search loops forever. Can you fix it?",
+        "Write a function that reverses a linked list.",
+        "Can I get another hint?",
+        "I'm still stuck",
+        "Is my solution correct now?",
+        "What is the answer type of this function?",
+      ].filter((text) => SessionHint.isSolutionRequest(text)),
+    ).toEqual([])
+  })
+})
+
+describe("SessionHint.solutionRequested", () => {
+  const question = { hint: true, text: "My binary search loops forever. Can you fix it?" }
+  const another = { hint: true, text: "another hint please" }
+  const solution = { hint: true, text: "show me the full solution" }
+
+  test("allows the full solution after hints", () => {
+    expect(SessionHint.solutionRequested([question, solution])).toBe(true)
+    expect(SessionHint.solutionRequested([question, another, another, solution])).toBe(true)
+  })
+
+  test("gives a hint first when the solution is requested before any hints", () => {
+    expect(SessionHint.solutionRequested([solution])).toBe(false)
+    expect(SessionHint.level([solution])).toBe(1)
+    expect(SessionHint.solutionRequested([{ hint: false, text: "What is a linked list?" }, solution])).toBe(false)
+  })
+
+  test("does not give the solution for hint requests or with Hint Mode off", () => {
+    expect(SessionHint.solutionRequested([question, another])).toBe(false)
+    expect(SessionHint.solutionRequested([question, { hint: false, text: "show me the full solution" }])).toBe(false)
+  })
+})
