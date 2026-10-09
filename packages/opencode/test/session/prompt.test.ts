@@ -767,6 +767,54 @@ it.instance(
   30_000,
 )
 
+it.instance(
+  "loop gives the full solution only when asked for it after hints",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Hint to solution",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const turns = [
+        { text: "Give me the full solution to my binary search bug.", reply: "First hint: what if lo equals mid?" },
+        { text: "Can I get another hint?", reply: "Second hint: look at the lo = mid line." },
+        { text: "Okay, show me the full solution", reply: "Here is the full solution." },
+        { text: "Write a function that reverses a linked list.", reply: "What does each node point to?" },
+      ]
+
+      yield* Effect.forEach(
+        turns,
+        (turn) =>
+          Effect.gen(function* () {
+            yield* prompt.prompt({
+              sessionID: chat.id,
+              agent: "build",
+              noReply: true,
+              hint: true,
+              parts: [{ type: "text", text: turn.text }],
+            })
+            yield* llm.text(turn.reply)
+            yield* prompt.loop({ sessionID: chat.id })
+          }),
+        { discard: true },
+      )
+
+      const bodies = (yield* llm.hits).map((hit) => JSON.stringify(hit.body))
+      expect(
+        bodies.map((body) =>
+          body.includes("explicitly asked for the full solution") ? "solution" : body.match(/Hint level \d of \d/g),
+        ),
+      ).toEqual([["Hint level 1 of 4"], ["Hint level 2 of 4"], "solution", ["Hint level 1 of 4"]])
+      // The solution request still carries the earlier hints, so the answer can build on them.
+      expect(bodies[2]).toContain("First hint: what if lo equals mid?")
+      expect(bodies[2]).toContain("Second hint: look at the lo = mid line.")
+    }),
+  30_000,
+)
+
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
