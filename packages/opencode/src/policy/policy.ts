@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import path from "path"
 
 /**
  * The AI-use policy expected at `.opencode/ai-policy.json` in a student's project.
@@ -20,3 +21,28 @@ export const AIPolicy = Schema.Struct({
 })
 
 export type AIPolicy = Schema.Schema.Type<typeof AIPolicy>
+
+export type AIPolicyLoadResult =
+  | { status: "not-found" }
+  | { status: "loaded"; policy: AIPolicy }
+  | { status: "invalid"; error: unknown }
+
+export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLoadResult> {
+  const policyPath = path.join(projectDirectory, ".opencode", "ai-policy.json")
+  const file = Bun.file(policyPath)
+
+  if (!(await file.exists())) return { status: "not-found" }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(await file.text())
+  } catch (error) {
+    return { status: "invalid", error }
+  }
+
+  if (!Schema.is(AIPolicy)(parsed)) {
+    return { status: "invalid", error: new Error("Invalid AI policy format") }
+  }
+
+  return { status: "loaded", policy: parsed }
+}
