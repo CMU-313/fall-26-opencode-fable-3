@@ -95,6 +95,23 @@ describe("formatTranscript properties", () => {
       }),
     )
   })
+
+  // R2: When thinking is hidden, /copy excludes thinking content without changing the remaining transcript.
+  // Kind: metamorphic. Hiding thinking must give exactly the copy of the same session with its thinking
+  // parts removed, so nothing else in the transcript may change.
+  test("R2: hiding thinking removes thinking parts and nothing else", () => {
+    fc.assert(
+      fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
+        const withoutThinking = history.map((message) => ({
+          ...message,
+          parts: message.parts.filter((item) => item.type !== "reasoning"),
+        }))
+        expect(formatTranscript(info, history, { ...options, thinking: false })).toBe(
+          formatTranscript(info, withoutThinking, { ...options, thinking: true }),
+        )
+      }),
+    )
+  })
 })
 
 // Each message starts with a visible text part holding a unique marker, so a property can find exactly where
