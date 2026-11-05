@@ -5,21 +5,11 @@ const NonEmptyString = Schema.String.pipe(
   Schema.check(Schema.makeFilter((value) => (value.trim().length ? undefined : "must not be empty"))),
 )
 
-function unknownFields(value: Record<string, unknown>, fields: object) {
-  const known = new Set(Object.keys(fields))
-  return Object.keys(value)
-    .filter((key) => !known.has(key))
-    .map((key) => ({ path: [key], issue: `unknown field "${key}"` }))
-}
-
 const ContactFields = {
   name: Schema.optional(NonEmptyString),
   email: Schema.optional(NonEmptyString),
 }
-const ContactBase = Schema.Struct(ContactFields)
-const Contact = Schema.StructWithRest(ContactBase, [Schema.Record(Schema.String, Schema.Unknown)]).pipe(
-  Schema.check(Schema.makeFilter((value) => unknownFields(value, ContactFields))),
-)
+const Contact = Schema.Struct(ContactFields)
 
 /**
  * The AI-use policy expected at `.opencode/ai-policy.json` in a student's project.
@@ -34,16 +24,13 @@ const AIPolicyFields = {
   prohibitedUses: Schema.Array(NonEmptyString),
   contact: Schema.optional(Contact),
 }
-const AIPolicyBase = Schema.Struct(AIPolicyFields)
-export const AIPolicy = Schema.StructWithRest(AIPolicyBase, [Schema.Record(Schema.String, Schema.Unknown)]).pipe(
-  Schema.check(Schema.makeFilter((value) => unknownFields(value, AIPolicyFields))),
-)
+export const AIPolicy = Schema.Struct(AIPolicyFields)
 
 export type AIPolicy = Schema.Schema.Type<typeof AIPolicy>
 
 export type AIPolicyLoadResult =
   | { status: "not-found" }
-  | { status: "loaded"; policy: AIPolicy }
+  | { status: "loaded"; policy: AIPolicy; warnings?: string[] }
   | { status: "invalid"; error: Error }
 
 export function formatAIPolicyError(pathname: string, error: unknown, kind: "json" | "schema") {
@@ -80,5 +67,18 @@ export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLo
     return { status: "invalid", error: new Error(formatAIPolicyError(policyPath, error, "schema"), { cause: error }) }
   }
 
-  return { status: "loaded", policy: decoded.value }
+  const warnings = [
+    ...unknownFields(parsed, AIPolicyFields),
+    ...(typeof parsed === "object" && parsed !== null && "contact" in parsed
+      ? unknownFields(parsed.contact, ContactFields, "contact.")
+      : []),
+  ]
+  return { status: "loaded", policy: decoded.value, ...(warnings.length ? { warnings } : {}) }
+}
+
+function unknownFields(value: unknown, fields: object, prefix = "") {
+  if (typeof value !== "object" || value === null) return []
+  return Object.keys(value)
+    .filter((key) => !Object.hasOwn(fields, key))
+    .map((key) => `Unknown field "${prefix}${key}" in .opencode/ai-policy.json`)
 }
