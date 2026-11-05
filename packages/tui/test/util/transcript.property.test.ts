@@ -126,6 +126,19 @@ describe("formatTranscript properties", () => {
       }),
     )
   })
+
+  // R7: Copying an unchanged session twice with the same settings must produce identical output.
+  // Kind: invariant. The second copy reads a deep clone, the way /copy rereads the session from the store,
+  // so the output can't depend on object identity.
+  test("R7: copying an unchanged session twice gives identical output", () => {
+    fc.assert(
+      fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
+        expect(formatTranscript(structuredClone(info), structuredClone(history), options)).toBe(
+          formatTranscript(info, history, options),
+        )
+      }),
+    )
+  })
 })
 
 // Each message starts with a visible text part holding a unique marker, so a property can find exactly where
