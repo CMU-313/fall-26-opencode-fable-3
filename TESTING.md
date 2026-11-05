@@ -33,7 +33,8 @@ only declares `test` as a task for a handful of packages:
 "@opencode-ai/core#test": { ... },
 "@opencode-ai/app#test": { ... },
 "@opencode-ai/ui#test": { ... },
-"@opencode-ai/session-ui#test": { ... }
+"@opencode-ai/session-ui#test": { ... },
+"@opencode-ai/tui#test": { ... }
 ```
 
 If your package isn't in that list, `bun turbo test` silently skips its `test` script in CI, even if you have real
@@ -52,7 +53,7 @@ bun test
 
 **Keep this job fast.** It's the only unit coverage that gates every push, so it targets ~5 minutes total. Turbo runs
 with `--concurrency=4` (same fix as `typecheck.yml` — ubuntu-latest's 4 vCPUs get oversubscribed at turbo's default
-concurrency of 10 across 5 packages' test tasks). If your change makes this step noticeably slower, profile it (see
+concurrency of 10 across 6 packages' test tasks). If your change makes this step noticeably slower, profile it (see
 `packages/opencode/script/profile-test-files.ts` and `perf/test-suite.md`) before adding more to it.
 
 ## HttpApi exerciser gates
@@ -110,11 +111,11 @@ A couple of things worth knowing:
 
 `packages/app/e2e/` has three tiers, and which one your test belongs in determines when it actually runs:
 
-| Directory | Runs | Job |
-| --- | --- | --- |
-| `e2e/smoke/`, `e2e/user-story/` | every push | `test.yml` → `e2e (smoke)` |
-| `e2e/regression/` | nightly (~5am ET) | `e2e-regression.yml` |
-| `e2e/performance/` | manually / benchmarking, not in CI | — |
+| Directory                       | Runs                               | Job                        |
+| ------------------------------- | ---------------------------------- | -------------------------- |
+| `e2e/smoke/`, `e2e/user-story/` | every push                         | `test.yml` → `e2e (smoke)` |
+| `e2e/regression/`               | nightly (~5am ET)                  | `e2e-regression.yml`       |
+| `e2e/performance/`              | manually / benchmarking, not in CI | —                          |
 
 **The smoke suite is deliberately small.** It's the only e2e coverage that gates every push, so it only holds fast,
 broad checks — enough to catch "the app doesn't render" or "the golden path is broken," not narrow edge cases. As of
