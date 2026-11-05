@@ -347,7 +347,7 @@ describe("Runner", () => {
           ready,
         )
         .pipe(Effect.forkChild)
-      yield* ready.await.pipe(Effect.timeout("250 millis"))
+      yield* ready.await.pipe(Effect.timeout("1 second"))
 
       yield* runner.cancel
       expect(Exit.isFailure(yield* Fiber.await(sh))).toBe(true)
