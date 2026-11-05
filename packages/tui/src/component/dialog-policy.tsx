@@ -4,7 +4,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { buildPolicyDisplay, type PolicyLoadResult } from "../policy"
 
-export function DialogPolicy(props: { result: PolicyLoadResult }) {
+export function DialogPolicy(props: { result: PolicyLoadResult; updated?: boolean }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const display = buildPolicyDisplay(props.result)
@@ -15,10 +15,11 @@ export function DialogPolicy(props: { result: PolicyLoadResult }) {
   dialog.setSize("large")
 
   return (
-    <box gap={1} paddingLeft={2} paddingRight={2} paddingBottom={1}>
+    <box id="ai-policy-dialog" gap={1} paddingLeft={2} paddingRight={2} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           AI-use policy
+          <Show when={props.updated}> (updated)</Show>
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc
@@ -30,12 +31,20 @@ export function DialogPolicy(props: { result: PolicyLoadResult }) {
           fallback={
             <Show
               when={invalid}
-              fallback={<text fg={theme.textMuted} wrapMode="word">{empty?.message}</text>}
+              fallback={
+                <text fg={theme.textMuted} wrapMode="word">
+                  {empty?.message}
+                </text>
+              }
             >
               {(policy) => (
                 <box gap={1}>
                   <For each={policy().errors}>
-                  {(error) => <text fg={theme.error} wrapMode="word">{error}</text>}
+                    {(error) => (
+                      <text fg={theme.error} wrapMode="word">
+                        {error}
+                      </text>
+                    )}
                   </For>
                 </box>
               )}
@@ -44,6 +53,13 @@ export function DialogPolicy(props: { result: PolicyLoadResult }) {
         >
           {(policy) => (
             <box gap={1}>
+              <For each={policy().warnings}>
+                {(warning) => (
+                  <text fg={theme.warning} wrapMode="word">
+                    {warning}
+                  </text>
+                )}
+              </For>
               <text fg={theme.text} wrapMode="word">
                 <b>Course:</b> {policy().courseName}
               </text>
@@ -52,25 +68,43 @@ export function DialogPolicy(props: { result: PolicyLoadResult }) {
               </text>
               <box>
                 <text fg={theme.textMuted}>Summary</text>
-                <text fg={theme.text} wrapMode="word">{policy().summary}</text>
+                <text fg={theme.text} wrapMode="word">
+                  {policy().summary}
+                </text>
               </box>
               <box>
-                <text fg={theme.success} attributes={TextAttributes.BOLD}>Allowed</text>
+                <text fg={theme.success} attributes={TextAttributes.BOLD}>
+                  Allowed
+                </text>
                 <For each={policy().allowedUses}>
-                  {(use) => <text fg={theme.text} wrapMode="word">• {use}</text>}
+                  {(use) => (
+                    <text fg={theme.text} wrapMode="word">
+                      • {use}
+                    </text>
+                  )}
                 </For>
               </box>
               <box>
-                <text fg={theme.error} attributes={TextAttributes.BOLD}>Not allowed</text>
+                <text fg={theme.error} attributes={TextAttributes.BOLD}>
+                  Not allowed
+                </text>
                 <For each={policy().prohibitedUses}>
-                  {(use) => <text fg={theme.text} wrapMode="word">• {use}</text>}
+                  {(use) => (
+                    <text fg={theme.text} wrapMode="word">
+                      • {use}
+                    </text>
+                  )}
                 </For>
               </box>
               <Show when={policy().contact.length > 0}>
                 <box>
                   <text fg={theme.textMuted}>Contact</text>
                   <For each={policy().contact}>
-                    {(value) => <text fg={theme.text} wrapMode="word">{value}</text>}
+                    {(value) => (
+                      <text fg={theme.text} wrapMode="word">
+                        {value}
+                      </text>
+                    )}
                   </For>
                 </box>
               </Show>

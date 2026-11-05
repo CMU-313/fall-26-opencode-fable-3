@@ -118,7 +118,7 @@ describe("loadAIPolicy", () => {
     }
   })
 
-  test("rejects unknown fields", async () => {
+  test("loads policies with unknown fields and warns with each field name", async () => {
     await using temp = await tmpdir()
     await writePolicy(
       temp.path,
@@ -127,14 +127,45 @@ describe("loadAIPolicy", () => {
         assignmentName: "OpenCode Feature Project",
         summary: "Use AI tools responsibly.",
         allowedUse: ["Brainstorming"],
+        instructorNotes: { reminder: "Review the rubric" },
         allowedUses: ["Brainstorming"],
         prohibitedUses: ["Submitting unreviewed work"],
+        contact: { name: "Course Staff", officeHours: ["Monday"] },
       }),
     )
 
     const result = await loadAIPolicy(temp.path)
 
+    expect(result).not.toHaveProperty("error")
+    expect(result).toMatchObject({
+      status: "loaded",
+      warnings: [
+        'Unknown field "allowedUse" in .opencode/ai-policy.json',
+        'Unknown field "instructorNotes" in .opencode/ai-policy.json',
+        'Unknown field "contact.officeHours" in .opencode/ai-policy.json',
+      ],
+    })
+    if (result.status !== "loaded") throw new Error("Expected policy to load with warnings")
+    expect(result.policy).not.toHaveProperty("allowedUse")
+    expect(result.policy).not.toHaveProperty("instructorNotes")
+    expect(result.policy.contact).toEqual({ name: "Course Staff" })
+  })
+
+  test("still rejects invalid known fields when unknown fields are present", async () => {
+    await using temp = await tmpdir()
+    await writePolicy(
+      temp.path,
+      JSON.stringify({
+        courseName: "Course",
+        assignmentName: "Assignment",
+        summary: "Use AI tools responsibly.",
+        allowedUses: 42,
+        prohibitedUses: [],
+        instructorNotes: "Not a validation error",
+      }),
+    )
+    const result = await loadAIPolicy(temp.path)
     expect(result.status).toBe("invalid")
-    if (result.status === "invalid") expect(result.error.message).toContain('unknown field "allowedUse"')
+    if (result.status === "invalid") expect(result.error.message).toContain("allowedUses")
   })
 })
