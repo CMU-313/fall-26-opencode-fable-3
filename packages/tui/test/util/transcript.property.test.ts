@@ -112,6 +112,20 @@ describe("formatTranscript properties", () => {
       }),
     )
   })
+
+  // R5: Restoring tool visibility must restore the original copied transcript.
+  // Kind: round-trip. Copy with tool details on, copy with them off, then turn them back on: the last copy
+  // must equal the first. This would catch a copy that changed the session's messages while hiding details.
+  test("R5: turning tool details off and back on restores the original copy", () => {
+    fc.assert(
+      fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
+        const before = formatTranscript(info, history, { ...options, toolDetails: true })
+        const hidden = formatTranscript(info, history, { ...options, toolDetails: false })
+        expect(hidden).not.toContain("**Input:**")
+        expect(formatTranscript(info, history, { ...options, toolDetails: true })).toBe(before)
+      }),
+    )
+  })
 })
 
 // Each message starts with a visible text part holding a unique marker, so a property can find exactly where
