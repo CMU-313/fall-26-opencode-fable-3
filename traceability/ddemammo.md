@@ -59,10 +59,19 @@ Generator choices are explained in comments in the test file.
 
 ## Step 3: Run, Triage, Fix
 
-The R4 property failed on its first real run (seed 764158364): generated package `a0`,
-then an extra package named `ck`. Turned out not to be a tool bug — `ck` is just a
-substring of the word "packages", which appears in every output no matter what. The
-property was checking for the raw random name instead of the full package name
-(`@acme/ck`), so it flagged a false match. Fixed the property to check for the scoped
-name instead. Reran it dozens of times after the fix (including the original failing
-seed) with no further failures, and the full `packages/core` suite passes (1104 tests).
+The R4 property failed twice — both times on a wrong test, not a tool bug.
+
+1. First (seed 764158364): generated package `a0`, extra package named `ck`. `ck` turned
+   out to be a substring of the word "packages", which appears in every output
+   regardless of what's added or removed. Fixed by checking for the full scoped package
+   name (`@acme/ck`) instead of the bare random string.
+2. That fix wasn't enough — CI caught a second case (seed -602322490): packages `e3a`
+   and `aa`, extra package named `e3`. `@acme/e3` is a literal prefix of the real,
+   untouched package `@acme/e3a`, so even the scoped-name substring check false-matched.
+   Fixed properly this time: instead of searching the rendered text at all, the test now
+   checks exact membership in the parsed package list (`overview.packages.map(p =>
+   p.name)`), which can't collide on prefixes the way string matching can.
+
+Verified the fix against both recorded counterexamples directly, then ran the test file
+20 times in a row with no failures, then the full `packages/core` suite (1104 tests,
+0 failures).

@@ -128,22 +128,21 @@ describe("tool.walkthrough properties", () => {
         const before = buildSnapshot(specs, noise)
         const originalOutput = WalkthroughAnalysis.render(WalkthroughAnalysis.analyze(before))
 
-        const withExtra = buildSnapshot(
-          [...specs, { dir: extraName, name: `@acme/${extraName}`, selfDeps: [] }],
-          noise,
-        )
-        // Check for the full scoped package name, not the bare extraName — a short
-        // random identifier (e.g. "ck") can land inside an unrelated word already in
-        // the output (e.g. "packages"), which made this check false-positive.
         const extraPackageName = `@acme/${extraName}`
-        const addedOutput = WalkthroughAnalysis.render(WalkthroughAnalysis.analyze(withExtra))
-        expect(addedOutput).toContain(extraPackageName) // sanity: adding it really did change the output
+        const withExtra = buildSnapshot([...specs, { dir: extraName, name: extraPackageName, selfDeps: [] }], noise)
+        const addedOverview = WalkthroughAnalysis.analyze(withExtra)
+        // sanity: adding it really did change the output. Checked by exact name match
+        // against the parsed package list, not a text/substring search — two random
+        // short names can be prefixes of each other (e.g. "e3" and "e3a"), which made a
+        // substring check on the rendered text false-positive both ways.
+        expect(addedOverview.packages.map((pkg) => pkg.name)).toContain(extraPackageName)
 
         const after = buildSnapshot(specs, noise) // "delete" = rebuild without the extra package
-        const afterOutput = WalkthroughAnalysis.render(WalkthroughAnalysis.analyze(after))
+        const afterOverview = WalkthroughAnalysis.analyze(after)
+        const afterOutput = WalkthroughAnalysis.render(afterOverview)
 
         expect(afterOutput).toBe(originalOutput)
-        expect(afterOutput).not.toContain(extraPackageName)
+        expect(afterOverview.packages.map((pkg) => pkg.name)).not.toContain(extraPackageName)
       }),
     )
   })
