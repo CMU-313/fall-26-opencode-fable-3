@@ -1,0 +1,13 @@
+diff --git a/packages/app/src/pages/session/v2/review-file-copy.ts b/packages/app/src/pages/session/v2/review-file-copy.ts
+index 7faef77..88f6beb 100644
+--- a/packages/app/src/pages/session/v2/review-file-copy.ts
++++ b/packages/app/src/pages/session/v2/review-file-copy.ts
+@@ -4,7 +4,7 @@ export async function copyReviewFilePath(path: string, options: {
+   onFailure: (path: string) => void
+ }) {
+   try {
+-    await options.writeText(path)
++    await options.writeText(path.trim())
+     options.onSuccess(path)
+     return true
+   } catch {

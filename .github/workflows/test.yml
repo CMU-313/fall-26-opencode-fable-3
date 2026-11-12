@@ -71,6 +71,11 @@ jobs:
         working-directory: packages/tui
         # Print passing property names explicitly for the project submission evidence.
         run: GITHUB_ACTIONS=false bun test test/util/transcript.property.test.ts --timeout 30000
+      - name: Run AI policy properties
+        timeout-minutes: 2
+        working-directory: packages/opencode
+        # Print passing property names explicitly for the project submission evidence.
+        run: GITHUB_ACTIONS=false bun test test/policy/policy.property.test.ts --timeout 30000
 
       - name: Check generated client
         timeout-minutes: 5
