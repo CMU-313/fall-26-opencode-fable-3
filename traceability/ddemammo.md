@@ -238,3 +238,106 @@ can't actually defend:
 **Final score: 65.57% (160/244), both as Stryker reports it and with 0 equivalent mutants
 excluded.** The honest path to a higher score here is a richer generator and a few more
 oracle-style assertions (both named above), not an equivalence argument.
+
+## Agent failure case
+
+None of my existing properties came from asking opencode directly (I wrote all of
+R2–R7 myself, in Claude Code), so I followed the assignment's fallback: I asked the real
+`opencode` CLI, running with my own Anthropic credentials, to write a property for R6,
+which had no property at all before this.
+
+### Transcript excerpt
+
+**My prompt** (via `bun run --conditions=browser packages/opencode/src/index.ts run`,
+model `claude-sonnet-5-5`):
+
+> Write one fast-check property-based test for this requirement of the walkthrough tool
+> (packages/core/src/tool/walkthrough-analysis.ts):
+>
+> R6: The tool must never run install, build, or lifecycle scripts found in any
+> package.json. Acceptance criteria: Add a postinstall script that writes a marker file;
+> run walkthrough; the marker file does not exist afterward.
+>
+> Put it in a new file packages/core/test/tool-walkthrough-analysis.agent.property.test.ts.
+> Use bun:test and fast-check, following the same style as the existing
+> packages/core/test/tool-walkthrough-analysis.property.test.ts (same import of
+> WalkthroughAnalysis, same json() helper pattern). Add fc.configureGlobal({ seed: 42 }) at
+> the top. Don't change any other files.
+
+**opencode's response:** it created
+[`packages/core/test/tool-walkthrough-analysis.agent.property.test.ts`](/packages/core/test/tool-walkthrough-analysis.agent.property.test.ts)
+with this property (abridged; full file is in the repo):
+
+```ts
+fc.configureGlobal({ seed: 42 })
+// ...
+describe("tool.walkthrough properties (agent)", () => {
+  test("R6: no install, build, or lifecycle script in any package.json is ever executed", () => {
+    // ... builds package.json manifests whose "scripts" fields are real shell commands
+    // that create marker files ...
+    const snapshot = { files, contents }
+    WalkthroughAnalysis.wanted(files)
+    WalkthroughAnalysis.render(WalkthroughAnalysis.analyze(snapshot))
+
+    expect(markers.length).toBeGreaterThan(0)
+    expect(markers.filter((marker) => existsSync(marker))).toEqual([])
+  })
+})
+```
+
+It ran the test (`1 pass, 0 fail, 201 expect() calls`) and finished successfully.
+
+### The mutant it let survive
+
+This property calls `WalkthroughAnalysis.analyze`/`.render` directly on an in-memory
+snapshot object it builds itself — never the real tool wrapper
+(`packages/core/src/tool/walkthrough.ts` or
+`packages/opencode/src/tool/walkthrough.ts`) that actually reads files from disk and is
+the only place a script could ever be executed. I confirmed this concretely: I wrote the
+same kind of mutant as my hand-written H5 (a "helpful" addition that runs a package's
+`postinstall` script via `Bun.spawnSync` before analyzing — this one in
+`packages/core/src/tool/walkthrough.ts`, saved as
+[`mutants/ddemammo/agent-case/postinstall.patch`](/mutants/ddemammo/agent-case/postinstall.patch))
+and ran opencode's property against it: **1 pass, 0 fail — identical to the unmutated
+code.** The property cannot tell the difference, because it never calls the mutated code
+at all.
+
+### Why the property was too weak
+
+This is the "always-passing property" failure mode named in the assignment, in a
+specific shape: the assertion doesn't restate the implementation so much as it tests a
+*different* implementation than the one with the bug. `WalkthroughAnalysis.analyze` is a
+pure function over data already in memory — it has no filesystem access and no way to
+spawn a process, so a property that only calls it is guaranteed to pass no matter what a
+real tool wrapper does. No generator or assertion fix within that function can repair
+this; the property has to call code that can actually violate R6.
+
+### Strengthened version
+
+I replaced it with
+[`packages/core/test/tool-walkthrough.agent.property.test.ts`](/packages/core/test/tool-walkthrough.agent.property.test.ts),
+which drives the real `WalkthroughTool` (packages/core) against a real temp directory,
+using the same harness `tool-walkthrough.test.ts`'s own "live" fixture test already
+uses. Each generated case writes a real `package.json` whose `scripts` include
+`postinstall` (what R6's acceptance criteria names) plus a random subset of other real
+npm/bun lifecycle script names, each one a real shell command that touches a marker file
+on disk, then runs the real tool and checks the marker is absent.
+
+I initially tried this against the `packages/opencode` wrapper (where H4/H5 live)
+reusing its existing fixture harness, and hit a real confound worth recording: that
+harness's project bootstrap runs a genuine `npm install` in the test directory
+(`packages/opencode/src/config/config.ts`, gated by `Flag.OPENCODE_PURE` — see
+`TESTING.md`'s own warning about this), which — independent of anything the walkthrough
+tool does — executes the test project's own `preinstall`/`install`/`postinstall`
+scripts as an ordinary, correct side effect of a real install. That made "did
+walkthrough run this, or did something else entirely" impossible to isolate there, even
+with `OPENCODE_PURE=1` set. I moved the strengthened test to `packages/core`'s wrapper
+and its lighter "live" harness instead (`tempLocationLayer`: a plain temp directory, no
+project bootstrap at all), and wrote an equivalent mutant there to verify it.
+
+### Evidence it kills the mutant
+
+- **Unmutated code:** 8/8 cases pass.
+- **With the postinstall mutant applied** (`mutants/ddemammo/agent-case/postinstall.patch`):
+  **8/8 cases fail** — every generated case's marker file exists after the tool runs,
+  exactly where opencode's original property showed no difference at all.
