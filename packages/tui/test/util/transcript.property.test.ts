@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, setSystemTime, test } from "bun:test"
 import fc from "fast-check"
 import type { Part } from "@opencode-ai/sdk/v2"
 import { formatTranscript, type MessageWithParts } from "../../src/util/transcript"
@@ -96,13 +96,22 @@ describe("formatTranscript properties", () => {
             if (a.info.time.created < b.info.time.created) expect(position(i)).toBeLessThan(position(j))
           }),
         )
+        // A prompt copied under the assistant's heading (or the reverse) is not the prompt the user sent, so
+        // each message must sit directly under its own role's heading, on a line of its own.
+        history.forEach((message, index) =>
+          expect(transcript.slice(0, position(index))).toMatch(
+            message.info.role === "user" ? /(^|\n)## User\n\n$/ : /(^|\n)## Assistant( \(.*\))?\n\n$/,
+          ),
+        )
       }),
     )
   })
 
   // R2: When thinking is hidden, /copy excludes thinking content without changing the remaining transcript.
   // Kind: metamorphic. Hiding thinking must give exactly the copy of the same session with its thinking
-  // parts removed, so nothing else in the transcript may change.
+  // parts removed, so nothing else in the transcript may change. Comparing two copies alone would pass if
+  // thinking were never copied at all, so the property also checks the session's own thinking parts: every
+  // one appears once when thinking is shown, and none when it is hidden.
   test("R2: hiding thinking removes thinking parts and nothing else", () => {
     fc.assert(
       fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
@@ -110,9 +119,11 @@ describe("formatTranscript properties", () => {
           ...message,
           parts: message.parts.filter((item) => item.type !== "reasoning"),
         }))
-        expect(formatTranscript(info, history, { ...options, thinking: false })).toBe(
-          formatTranscript(info, withoutThinking, { ...options, thinking: true }),
-        )
+        const hidden = formatTranscript(info, history, { ...options, thinking: false })
+        expect(hidden).toBe(formatTranscript(info, withoutThinking, { ...options, thinking: true }))
+        expect(markers(hidden, "r")).toEqual([])
+        const shown = formatTranscript(info, history, { ...options, thinking: true })
+        markers(JSON.stringify(history), "r").forEach((item) => expect(shown.split(item).length).toBe(2))
       }),
     )
   })
@@ -120,12 +131,18 @@ describe("formatTranscript properties", () => {
   // R5: Restoring tool visibility must restore the original copied transcript.
   // Kind: round-trip. Copy with tool details on, copy with them off, then turn them back on: the last copy
   // must equal the first. This would catch a copy that changed the session's messages while hiding details.
+  // The original copy is also checked against the session: it shows every tool input, output and error once,
+  // the details-off copy shows none of them, and both still name every tool that ran.
   test("R5: turning tool details off and back on restores the original copy", () => {
     fc.assert(
       fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
         const before = formatTranscript(info, history, { ...options, toolDetails: true })
         const hidden = formatTranscript(info, history, { ...options, toolDetails: false })
-        expect(hidden).not.toContain("**Input:**")
+        const details = ["i", "o", "e"].flatMap((kind) => markers(JSON.stringify(history), kind))
+        details.forEach((item) => expect(before.split(item).length).toBe(2))
+        expect(["i", "o", "e"].flatMap((kind) => markers(hidden, kind))).toEqual([])
+        const tools = history.flatMap((message) => message.parts.filter((item) => item.type === "tool"))
+        expect(hidden.split("**Tool: ").length - 1).toBeGreaterThanOrEqual(tools.length)
         expect(formatTranscript(info, history, { ...options, toolDetails: true })).toBe(before)
       }),
     )
@@ -143,6 +160,28 @@ describe("formatTranscript properties", () => {
       }),
     )
   })
+
+  // R7: Copying an unchanged session twice with the same settings must produce identical output.
+  // Kind: metamorphic. Real users copy seconds to days apart, so moving the clock forward between two copies
+  // of the same session must not change the copy. Two copies made back to back can't catch a copy that
+  // depends on the current time, since both run within the same second.
+  test("R7: copying the same session later gives identical output", () => {
+    fc.assert(
+      fc.property(
+        session,
+        messages(fc.boolean()),
+        settings,
+        fc.integer({ min: 1_000, max: 10 * 365 * 24 * 60 * 60 * 1_000 }),
+        (info, history, options, later) => {
+          const first = formatTranscript(info, history, options)
+          setSystemTime(new Date(Date.now() + later))
+          const second = formatTranscript(info, history, options)
+          setSystemTime()
+          expect(second).toBe(first)
+        },
+      ),
+    )
+  })
 })
 
 // Each message starts with a visible text part holding a unique marker, so a property can find exactly where
@@ -156,13 +195,13 @@ function build(
     role: "user" | "assistant"
     created: number
     completed: boolean
-    parts: DistributiveOmit<Part, "id" | "sessionID" | "messageID">[]
+    parts: PartSpec[]
   },
   index: number,
 ): MessageWithParts {
   const id = `msg_${String(index).padStart(3, "0")}`
   const parts = [{ type: "text" as const, text: marker(index) }, ...spec.parts].map((item, n) => ({
-    ...item,
+    ...tag(item, `${index}.${n}`),
     id: `prt_${n}`,
     sessionID: "ses_test",
     messageID: id,
@@ -198,4 +237,23 @@ function build(
   }
 }
 
+// Thinking text ([[r…]]) and tool input ([[i…]]), output ([[o…]]) and error ([[e…]]) each end with a unique marker,
+// so a property can check exactly which of them a copy shows instead of only comparing two copies.
+function tag(item: PartSpec, key: string): PartSpec {
+  if (item.type === "reasoning") return { ...item, text: `${item.text}[[r${key}]]` }
+  if (item.type !== "tool") return item
+  const input = { ...item.state.input, command: `${String(item.state.input.command)}[[i${key}]]` }
+  if (item.state.status === "completed")
+    return { ...item, state: { ...item.state, input, output: `${item.state.output}[[o${key}]]` } }
+  if (item.state.status === "error")
+    return { ...item, state: { ...item.state, input, error: `${item.state.error}[[e${key}]]` } }
+  return { ...item, state: { ...item.state, input } }
+}
+
+// Every marker of one kind (m, r, i, o, e) found in a string, such as a copy or the serialized session.
+function markers(value: string, kind: string) {
+  return value.match(new RegExp(`\\[\\[${kind}[0-9.]+\\]\\]`, "g")) ?? []
+}
+
+type PartSpec = DistributiveOmit<Part, "id" | "sessionID" | "messageID">
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
