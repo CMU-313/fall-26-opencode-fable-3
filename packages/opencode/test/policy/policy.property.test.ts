@@ -131,12 +131,22 @@ const validPolicy = fc.record({
 const policyRevision = fc
   .record({
     policy: validPolicy,
-    field: fc.constantFrom("courseName", "assignmentName", "summary", "allowedUses", "prohibitedUses", "contact"),
+    field: fc.constantFrom(
+      "courseName",
+      "assignmentName",
+      "summary",
+      "allowedUses",
+      "prohibitedUses",
+      "contact",
+      "contactEmail",
+    ),
   })
   .map((input) => ({
     policy: input.policy,
     // Every generated revision changes exactly one field, including fields that
     // a comparison limited to the course/assignment header would miss.
+    // P5 red team (J3, from jannaanl): "contactEmail" changes only the contact
+    // email, so a comparison that ignores email is caught.
     changed:
       input.field === "allowedUses" || input.field === "prohibitedUses"
         ? { ...input.policy, [input.field]: [...input.policy[input.field], "Revision!"] }
@@ -145,7 +155,19 @@ const policyRevision = fc
               ...input.policy,
               contact: { name: `${input.policy.contact?.name ?? ""}!`, email: input.policy.contact?.email },
             }
-          : { ...input.policy, [input.field]: `${input.policy[input.field]}!` },
+          : input.field === "contactEmail"
+            ? {
+                ...input.policy,
+                contact: {
+                  ...input.policy.contact,
+                  email: input.policy.contact?.email === "staff@example.edu" ? "ta@example.edu" : "staff@example.edu",
+                },
+              }
+            : {
+                ...input.policy,
+                [input.field as "courseName" | "assignmentName" | "summary"]:
+                  `${input.policy[input.field as "courseName" | "assignmentName" | "summary"]}!`,
+              },
   }))
 
 // R6: Closing /policy with Esc and reopening it without changing the file

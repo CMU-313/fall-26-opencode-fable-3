@@ -1,0 +1,14 @@
+diff --git a/packages/app/src/pages/session/v2/review-panel-v2.tsx b/packages/app/src/pages/session/v2/review-panel-v2.tsx
+index bcb634c..b9c6594 100644
+--- a/packages/app/src/pages/session/v2/review-panel-v2.tsx
++++ b/packages/app/src/pages/session/v2/review-panel-v2.tsx
+@@ -123,7 +123,8 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
+     }
+ 
+     return copyReviewFilePath(path, {
+-      writeText: (value) => clipboard.writeText(value),
++      // Copy a full path so it can be pasted straight into a terminal.
++      writeText: (value) => clipboard.writeText(value.startsWith("/") ? value : `${sdk().directory}/${value}`),
+       onSuccess: (value) => {
+         showToast({
+           variant: "success",

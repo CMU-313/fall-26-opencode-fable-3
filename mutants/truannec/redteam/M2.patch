@@ -1,0 +1,25 @@
+diff --git a/packages/app/src/pages/session/v2/review-file-copy.ts b/packages/app/src/pages/session/v2/review-file-copy.ts
+index 7faef77..4d0b9a9 100644
+--- a/packages/app/src/pages/session/v2/review-file-copy.ts
++++ b/packages/app/src/pages/session/v2/review-file-copy.ts
+@@ -1,10 +1,19 @@
++const MAX_COPY_SEGMENTS = 5
++
++// Keep long paths readable: first folder, an ellipsis, then parent/file.
++function compactPath(path: string) {
++  const parts = path.split("/")
++  if (parts.length <= MAX_COPY_SEGMENTS) return path
++  return [parts[0], "…", ...parts.slice(-2)].join("/")
++}
++
+ export async function copyReviewFilePath(path: string, options: {
+   writeText: (value: string) => Promise<void>
+   onSuccess: (path: string) => void
+   onFailure: (path: string) => void
+ }) {
+   try {
+-    await options.writeText(path)
++    await options.writeText(compactPath(path))
+     options.onSuccess(path)
+     return true
+   } catch {

@@ -183,22 +183,41 @@ test("R3: instructorNotes preserves a valid policy and produces a warning", asyn
 ### Mutants it let survive
 
 - **H3** (my hand-written R3 mutant: `!Object.hasOwn(fields, key)` → `!(key in fields)`) survived. With H3 applied, opencode's test still reports `1 pass, 0 fail`.
-- I also ran Stryker on just the unknown-field code (`src/policy/policy.ts:70-84`, seed 42) with only opencode's test. It killed **14 of 33 (42.42%)**. The worst survivor was **L81 `Object.keys(value).filter(...)` → `Object.keys(value)`**, which removes the filter so *every* field gets an "Unknown field" warning, including `courseName` and `summary`. Other survivors drop the warnings for unknown fields inside `contact` (L72–73) or add a bogus warning when there's no `contact` (L74).
+- I also ran Stryker on just the unknown-field code (`src/policy/policy.ts:70-84`, seed 42) with only opencode's test. It killed **14 of 33 (42.42%)**. The worst survivor was **L81 `Object.keys(value).filter(...)` → `Object.keys(value)`**, which removes the filter so that all fields gets an "Unknown field" warning, including `courseName` and `summary`. Other survivors drop the warnings for unknown fields inside `contact` (L72–73) or add a bogus warning when there's no `contact` (L74).
 
 ### Why the property was too weak
 
-It has two problems, a generator that never reaches the bug and a weak oracle:
-- **The generator only varies the *value* of `instructorNotes`.** The policy, the unknown key name, and the shape of the file are all fixed, so it never tries other unknown names (like `toString`, which is what H3 breaks) or unknown fields inside `contact`. Running it 50 times with different JSON values for one field is basically one test case repeated.
-- **`toContain` only checks that one expected warning is in the list.** It never checks that there are no *extra* warnings, so a loader that warns about every field (L81) still passes. It also basically restates what opencode saw in the source: it copied the exact warning string from `policy.ts` instead of checking the requirement, which is "a warning names *each* unknown field".
+- **Generator only varies the *value* of `instructorNotes`.** The policy, the unknown key name, and the shape of the file are all fixed, so it never tries other unknown names (like `toString`, which is what H3 breaks) or unknown fields inside `contact`. Running it 50 times with different JSON values for one field is basically one test case repeated.
+- **`toContain` only checks that one expected warning is in the list.** It never checks that there are no extra warnings, so a loader that warns about every field (L81) still passes. It also basically restates what opencode saw in the source so it copied the exact warning string from `policy.ts` instead of checking the requirement, which is "a warning names each unknown field".
 
 ### Strengthened version
 
-I rewrote [`policy.agent.property.test.ts`](/packages/opencode/test/policy/policy.agent.property.test.ts) to keep opencode's structure but fix both problems:
-- It generates the policy itself, and 1–4 unknown top-level keys drawn from a list that includes names inherited from `Object.prototype` (`constructor`, `toString`, `valueOf`, `hasOwnProperty`). It also adds 0–2 unknown fields inside `contact`.
+For the strengthened version, I rewrote [`policy.agent.property.test.ts`](/packages/opencode/test/policy/policy.agent.property.test.ts) to keep opencode's structure but fix both problems:
+- It now generates the policy itself, and 1–4 unknown top-level keys drawn from a list that includes names inherited from `Object.prototype` (`constructor`, `toString`, `valueOf`, `hasOwnProperty`). It also adds 0–2 unknown fields inside `contact`.
 - It checks that the clean policy has no warnings at all, and that the policy content is unchanged after unknown fields are added.
 - It requires exactly one warning per unknown field, each naming its full path in quotes (`"toString"`, `"contact.phone"`), and no other warnings.
 
 ### Evidence it kills the mutant
 
 - **H3:** the strengthened property fails with H3 applied. Counterexample: a policy plus `{"instructorNotes": 0, "toString": {}}`, where the loader produced no warning for `toString`.
-- **Stryker (same range, same seed):** 14/33 killed (42.42%) before, and **22/33 (66.67%)** after. The newly killed mutants include L81 (warn on every field), L72–73 (nested `contact` warnings), and L74 (the bogus warning). The 11 still surviving are the same equivalent mutants argued above (the six at line 72 and the five at line 80), so the strengthened property kills every non-equivalent mutant in this code.
+- **Stryker (same range, same seed):** 14/33 killed (42.42%) before, and **22/33 (66.67%)** after. The newly killed mutants include L81 (warn on every field), L72–73 (nested `contact` warnings), and L74 (the bogus warning). The 11 still surviving are the same equivalent mutants argued above (the six at line 72 and the five at line 80), so the strengthened property kills pretty much all non-equivalent mutant in this code.
+
+## Red team
+
+### Mutants I received
+
+My feature was red-teamed by **Janna Lu (`jannaanl`)**, who posted three mutants on [my PR #40](https://github.com/CMU-313/fall-26-opencode-fable-3/pull/40#issuecomment-6783058317), written against commit `588e85d`. Copies of her patches are in [`mutants/truannec/redteam-received/`](/mutants/truannec/redteam-received/). I applied each one and ran `bun test test/policy/policy.property.test.ts` from `packages/opencode` (seed 42).
+
+| ID | Sent by | Requirement | Change | Result against my P4 properties (her run) | Result now | Fix |
+|---|---|---|---|---|---|---|
+| J1 | jannaanl | R4 | `NonEmptyString` uses `value.replaceAll(" ", "")` instead of `value.trim()`, so a value made of tabs or newlines counts as non-empty | Survived (R4 had no property) | **Killed** by the R4 oracle property | Already fixed by my P5 R4 property: its blank-string generator includes `"\t"` and `"\n  "`, and every corrupted field must get its own error line |
+| J2 | jannaanl | R2 | The JSON error message uses `path.basename(pathname)` instead of the full path | Survived (R2 had no property) | **Killed** by the R2 invariant | Already fixed by my P5 R2 property, which requires the full policy path in both the loader error and the `/policy` display |
+| J3 | jannaanl | R5 | The "updated" check sets `contact.email` to `undefined` on both sides before comparing, so an email-only edit never shows "(updated)" | Survived | **Killed** by the R5 oracle property after my fix | My R5 generator only ever changed `contact.name`, and `email` was always the same constant, so an email-only edit never happened. I added a `contactEmail` revision to `policyRevision` that changes only the email (`staff@example.edu` ↔ `ta@example.edu`, or adds one when there's no contact). The R5 oracle now fails on J3 with an email-only change where "(updated)" never appears. |
+
+After the J3 fix, all 7 properties still pass on the real code, and my hand-written H5 and H6 are still killed.
+
+J3 was a good catch. It's the same kind of gap as my own H5: the "updated" check only gets tested on the fields my generator happens to change, and I'd left one out.
+
+### My attack
+
+I red-teamed **Rebecca Sucgang (`rsucgang`, Team Berry Fresh)**'s copy-file-path feature and posted three mutants on [her PR #37](https://github.com/CMU-313/fall-26-opencode-team-berry-fresh/pull/37#issuecomment-6784445169), written against commit `d3f74e8`. The patches are in [`mutants/truannec/redteam/`](/mutants/truannec/redteam/) (M1 → her R2, M2 → her R4, M3 → her R5).

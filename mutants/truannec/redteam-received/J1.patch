@@ -1,0 +1,12 @@
+diff --git a/packages/opencode/src/policy/policy.ts b/packages/opencode/src/policy/policy.ts
+--- a/packages/opencode/src/policy/policy.ts
++++ b/packages/opencode/src/policy/policy.ts
+@@ -2,7 +2,7 @@ import { Cause, Exit, Schema, SchemaIssue } from "effect"
+ import path from "path"
+ 
+ const NonEmptyString = Schema.String.pipe(
+-  Schema.check(Schema.makeFilter((value) => (value.trim().length ? undefined : "must not be empty"))),
++  Schema.check(Schema.makeFilter((value) => (value.replaceAll(" ", "").length ? undefined : "must not be empty"))),
+ )
+ 
+ const ContactFields = {

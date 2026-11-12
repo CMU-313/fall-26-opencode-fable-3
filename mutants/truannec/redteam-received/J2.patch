@@ -1,0 +1,12 @@
+diff --git a/packages/opencode/src/policy/policy.ts b/packages/opencode/src/policy/policy.ts
+--- a/packages/opencode/src/policy/policy.ts
++++ b/packages/opencode/src/policy/policy.ts
+@@ -35,7 +35,7 @@ export type AIPolicyLoadResult =
+ 
+ export function formatAIPolicyError(pathname: string, error: unknown, kind: "json" | "schema") {
+   const detail = error instanceof Error ? error.message : String(error)
+-  if (kind === "json") return `Invalid AI policy in ${pathname}:\n  - file is not valid JSON: ${detail}`
++  if (kind === "json") return `Invalid AI policy in ${path.basename(pathname)}:\n  - file is not valid JSON: ${detail}`
+ 
+   const issues = Schema.isSchemaError(error)
+     ? SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues
