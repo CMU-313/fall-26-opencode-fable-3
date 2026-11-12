@@ -1,0 +1,13 @@
+diff --git a/packages/core/src/tool/walkthrough-analysis.ts b/packages/core/src/tool/walkthrough-analysis.ts
+index 92327ff..5f9670c 100644
+--- a/packages/core/src/tool/walkthrough-analysis.ts
++++ b/packages/core/src/tool/walkthrough-analysis.ts
+@@ -36,7 +36,7 @@ const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"
+ const MAX_EXPORTS = 5
+ const MAX_DESCRIPTION = 200
+ 
+-const inNodeModules = (file: string) => file.split("/").includes("node_modules")
++const inNodeModules = (file: string) => file.split("/")[0] === "node_modules"
+ const isManifest = (file: string) => file === MANIFEST || file.endsWith(`/${MANIFEST}`)
+ const dirname = (file: string) => (file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "")
+ const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name)
