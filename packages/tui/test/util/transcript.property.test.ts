@@ -3,6 +3,10 @@ import fc from "fast-check"
 import type { Part } from "@opencode-ai/sdk/v2"
 import { formatTranscript, type MessageWithParts } from "../../src/util/transcript"
 
+// Fixed for Stryker mutation runs: a mutant must be killed or survive the same
+// way on every run, which a re-randomized seed can't guarantee.
+fc.configureGlobal({ seed: 42 })
+
 // Generators
 //
 // Message text mixes ordinary random strings with text that looks like transcript structure (role headers,
