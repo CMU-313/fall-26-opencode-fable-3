@@ -99,3 +99,142 @@ below. H4 and H5 are a real, separate finding: R1 and R6 are both, in the end, p
 of the *wrapper* tools (`packages/core/src/tool/walkthrough.ts` and
 `packages/opencode/src/tool/walkthrough.ts`), not of the pure analyzer my property suite
 targets, and nothing in this project currently tests either of them with generated input.
+
+## Stryker comparison
+
+### Setup
+
+My config is [`packages/core/stryker.ddemammo.config.json`](/packages/core/stryker.ddemammo.config.json).
+It uses the `command` runner to run only my property file (`bun test
+test/tool-walkthrough-analysis.property.test.ts`), and mutates three ranges of
+`src/tool/walkthrough-analysis.ts` — `39-84` (the small helpers, `parse`, and
+`packageDirs`), `96-117` (`entryPoints`), and `130-191` (`analyze` and `render`) — which
+together are every function my properties actually call. I left out `1-37` (type/schema
+declarations, nothing to mutate), `86-94` (`excerpt`, used only for README-based
+descriptions, which none of my properties touch), and `118-128` (`wanted`, which is only
+called by the real tool wrapper, not by my pure-function tests). I fixed the fast-check
+**seed to 42** with `fc.configureGlobal({ seed: 42 })` at the top of the property file.
+
+My feature's pure logic lives in `packages/core`, not `packages/opencode` (where the
+team's shared Stryker dependency was added for P5), so I added
+`@stryker-mutator/core@10.1.1` to `packages/core` myself — no one else on the team needed
+it there. Each run took 7–33 seconds; no `incremental` mode or chunking was needed at this
+scope.
+
+Reports: [`mutants/ddemammo/mutation-before-strengthening.html`](/mutants/ddemammo/mutation-before-strengthening.html)
+and [`mutants/ddemammo/mutation.html`](/mutants/ddemammo/mutation.html) (final).
+
+| Run | Mutants | Killed | Survived | Score (Stryker) |
+| --- | --- | --- | --- | --- |
+| Before strengthening (4 properties) | 244 | 86 | 158 | 35.25% |
+| After strengthening (6 properties) | 244 | 160 | 84 | **65.57%** |
+
+### Which of my hand-written mutants did Stryker never generate? Why not?
+
+H4 and H5 live in `packages/opencode/src/tool/walkthrough.ts`, a different package
+entirely — Stryker only mutates the file ranges I gave it inside `packages/core`, so it
+can't reach either one.
+
+H1 removes a condition (`&& names.has(dep)`) from an existing filter. Stryker did
+generate something adjacent to this — dropping the whole `.filter(...)` call, or negating
+the `dep !== name` half — but never the exact "drop just the second half of an `&&`"
+shape, since that specific clause only appears once and Stryker's operator mutators work
+on whole conditions, not sub-clauses independently combined the way I removed one by hand.
+
+H2 and H3 are both about *which* check is used (`.includes()` vs `[0] ===`, exact `Set.has`
+vs `.some(startsWith)`) rather than changing an operator or literal in otherwise-identical
+code — Stryker's mutators rewrite existing expressions, they don't swap one API/algorithm
+for a different one that happens to behave almost the same. Neither of those appeared.
+
+### Which Stryker survivors would I never have thought of? Are any of them plausible bugs?
+
+- **The `dependsOn` filter without `.sort()`** (`[...new Set(dependencies)].filter(...)`
+  with `.sort()` dropped): genuinely plausible — someone "simplifies" the line and forgets
+  sorting was load-bearing for a stable, diffable walkthrough output. It survives because
+  my R2 property only checks *membership* (`toContain`), never the order.
+- **`topLevel` and `packages` losing their own `.sort(...)` calls** (same shape, two
+  different places): same realistic slip, same reason it survives — nothing of mine
+  checks output *order*, only output *contents*.
+- **Dropping the `description` field entirely** (`...(description ? { description } : {})`
+  → always `{}`): a very plausible bug (an accidental `{}` instead of `{ description }`
+  during a refactor), and I never noticed it survives until Stryker pointed at it — none
+  of my 5 requirements from P3/P4 say anything about per-package descriptions, so nothing
+  of mine was ever going to catch this.
+- **Dropping the repository name field** (`...(name ? { name } : {})` → always `{}`): same
+  shape, same realistic slip. More interesting: even my *round-trip* and *metamorphic*
+  properties don't catch it, because they only check that two runs agree with each other,
+  not that either run's `name` is actually correct against the real `package.json`.
+
+### What does each approach find that the other doesn't?
+
+My hand-written mutants came straight from my interview-derived requirements, so each one
+has a clear "why" tied to what a real user said (H1 → "never hallucinate a dependency",
+H2 → "exclude `node_modules`", H3 → "only the file count should change"). They could also
+reach into a different *package* entirely (H4, H5 in the live tool wrapper), which Stryker
+structurally cannot do since it only mutates the file ranges I point it at.
+
+Stryker was far more exhaustive inside the one file it could reach: it tried every
+operator, boundary, and literal, and found real gaps I hadn't thought to test by hand —
+the two dropped-`.sort()` cases and the two dropped-field cases above are all things a
+real PR reviewer could plausibly miss, and none of them trace back to anything a specific
+interviewee said. The cost is volume: 84 survivors remain, and most of them are things my
+generators simply never reach (see Equivalent mutants, below) rather than things Stryker
+"found" in any deep sense — a lot of its output is "I changed an operator in code your
+test never drives with an input where it matters."
+
+### Strengthening
+
+All improvements below were made by strengthening properties, not by adding example-based
+tests.
+
+- **New property, R7 (model/oracle):** `entryPoints()` was never exercised on `bin`,
+  `main`, `module`, or `exports` at all — my original generator only ever created a plain
+  `src/index.ts` package. The new property generates all four fields (including the
+  >5-subpath truncation case) and checks the result against an independent
+  recomputation of `entryPoints()`'s own documented ordering, *and* checks the rendered
+  `entry:` line matches. This single property killed most of the survivors in lines
+  96–117 and the `entry:`-line survivors in `render()`.
+- **New property, R2/R7 (invariant):** a repo with zero real packages and 0–3 unrelated
+  top-level directories, checking the "No packages detected" fallback text and that the
+  "## Top-level directories" section appears exactly when there's something to show. This
+  killed the `render()` survivors in its empty-repo and empty-topLevel branches (lines
+  ~183–190), which none of the other properties ever reached (they always generate ≥1
+  package and ≥1 top-level directory).
+- **Strengthened, R2 (invariant):** added a check that the rendered `depends on:` line
+  appears exactly as often as packages with a non-empty `dependsOn`, and that its text
+  matches the structured array exactly — not just that the structured data was right.
+  This killed the remaining `dependsOn.length > 0` / `depends on:`-line survivors in
+  `render()`.
+
+Re-running the hand-written mutants against the strengthened file doesn't change their
+results: H1 is still killed, H2–H5 still survive for the same reasons recorded above (none
+of this strengthening touched `node_modules` handling, entry-point *file matching*, or the
+wrapper tools).
+
+### Equivalent mutants
+
+I did not find any mutant I could confidently argue is truly equivalent — meaning its
+change can *never* be observed by any possible test, not just by mine. This analyzer has
+very little redundant or dead logic (unlike, say, schema-validation code that often
+double-checks something already guaranteed upstream); nearly every surviving condition,
+optional spread, or filter corresponds to a real branch that *could* produce a different
+answer for some input, including ones outside what my generators currently produce.
+
+Instead, every survivor I looked at traces to one of these concrete, closeable gaps:
+
+- **Generator narrowness.** My generators never produce: a non-object root manifest
+  (a bare array or string as the whole `package.json`), a workspace glob with `!`
+  negation or more than one path segment, a package name or export key containing regex
+  special characters, or out-of-natural-order packages/exports/directories (so every
+  `.sort()` removal is unobservable purely by luck of generation order, not by
+  equivalence).
+- **Assertion narrowness.** Nothing of mine checks a package's `description`, the
+  repository `name` field's actual *value* (only that it's consistent across two runs),
+  or output *order* (only output *membership*).
+
+Given that, I'm reporting the same score both ways rather than guessing at equivalence I
+can't actually defend:
+
+**Final score: 65.57% (160/244), both as Stryker reports it and with 0 equivalent mutants
+excluded.** The honest path to a higher score here is a richer generator and a few more
+oracle-style assertions (both named above), not an equivalence argument.

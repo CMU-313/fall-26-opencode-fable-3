@@ -2,6 +2,10 @@ import { describe, test, expect } from "bun:test"
 import fc from "fast-check"
 import { WalkthroughAnalysis } from "@opencode-ai/core/tool/walkthrough-analysis"
 
+// Fixed for Stryker (P5): a mutant must be killed or survive the same way on every run,
+// not depending on which random inputs fast-check happens to pick that time.
+fc.configureGlobal({ seed: 42 })
+
 const json = (value: unknown) => JSON.stringify(value)
 
 /**
@@ -79,6 +83,7 @@ describe("tool.walkthrough properties", () => {
       fc.property(pkgsArb, fc.nat({ max: 4 }), (specs, noise) => {
         const snapshot = buildSnapshot(specs, noise)
         const overview = WalkthroughAnalysis.analyze(snapshot)
+        const rendered = WalkthroughAnalysis.render(overview)
         const realNames = new Set(specs.map((spec) => spec.name))
 
         expect(new Set(overview.packages.map((pkg) => pkg.name))).toEqual(realNames)
@@ -89,7 +94,13 @@ describe("tool.walkthrough properties", () => {
             expect(realNames.has(dep)).toBe(true)
             expect(spec.selfDeps).toContain(dep)
           }
+          // The rendered line must match the structured data exactly.
+          if (pkg.dependsOn.length > 0) expect(rendered).toContain(`  depends on: ${pkg.dependsOn.join(", ")}`)
         }
+        // And it must appear exactly as often as packages that actually have a dependency —
+        // not more (a stray line) and not fewer (a dropped one).
+        const expectedLines = overview.packages.filter((pkg) => pkg.dependsOn.length > 0).length
+        expect(rendered.split("\n").filter((line) => line.startsWith("  depends on:")).length).toBe(expectedLines)
       }),
     )
   })
@@ -181,6 +192,122 @@ describe("tool.walkthrough properties", () => {
         expect(changed).toEqual(["packages"])
         expect(afterCounts.get("packages")).toBe((beforeCounts.get("packages") ?? 0) + 1)
       }),
+    )
+  })
+
+  // R7 (revised): every fact in the output must be independently re-derivable from the
+  // manifest data, not just the package/dependency names R2-R5 already cover. This closes
+  // a real gap found via Stryker (P5): the original generator never varied bin/main/module/
+  // exports, so entryPoints()'s own formatting logic, and render()'s "entry:"/"depends on:"
+  // lines, were never exercised by anything — a mutant there had nothing to disagree with.
+  //
+  // Generator choices: each package independently gets 0-1 of {string bin, object bin},
+  // an optional main, an optional module, and 0-1 of {string exports, object exports with
+  // 1-8 subpaths} — covering every branch entryPoints() has, including the ">5 exports"
+  // truncation. "src: src/index.ts" is always present too, since buildSnapshot always
+  // writes that file; the oracle below replicates that ordering exactly.
+  // Kind: model/oracle
+  test("R7: entry points and dependency lines are independently re-derivable from the manifest", () => {
+    const binArb = fc.option(
+      fc.oneof(
+        fc.webUrl().map((bin) => ({ kind: "string" as const, bin })),
+        fc
+          .dictionary(fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/), fc.webUrl(), { minKeys: 1, maxKeys: 3 })
+          .map((bin) => ({ kind: "object" as const, bin })),
+      ),
+      { nil: undefined },
+    )
+    const exportsArb = fc.option(
+      fc.oneof(
+        fc.webUrl().map((exports) => ({ kind: "string" as const, exports })),
+        fc
+          .uniqueArray(fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/), { minLength: 1, maxLength: 8 })
+          .map((keys) => ({ kind: "object" as const, exports: Object.fromEntries(keys.map((k) => [`./${k}`, `./${k}.ts`])) })),
+      ),
+      { nil: undefined },
+    )
+
+    fc.assert(
+      fc.property(
+        nameArb,
+        binArb,
+        fc.option(fc.webUrl(), { nil: undefined }),
+        fc.option(fc.webUrl(), { nil: undefined }),
+        exportsArb,
+        (pkgName, bin, main, moduleField, exportsField) => {
+          const manifest: Record<string, unknown> = { name: `@acme/${pkgName}` }
+          if (bin) manifest.bin = bin.kind === "string" ? bin.bin : bin.bin
+          if (main) manifest.main = main
+          if (moduleField) manifest.module = moduleField
+          if (exportsField) manifest.exports = exportsField.kind === "string" ? exportsField.exports : exportsField.exports
+
+          const snapshot = buildSnapshot([{ dir: pkgName, name: `@acme/${pkgName}`, selfDeps: [] }], 0)
+          // Overwrite the manifest buildSnapshot wrote with one that has the richer fields.
+          snapshot.contents[`packages/${pkgName}/package.json`] = json(manifest)
+
+          const overview = WalkthroughAnalysis.analyze(snapshot)
+          const pkg = overview.packages[0]
+
+          // Independent oracle: replicate entryPoints()'s own documented ordering
+          // (bin, main, module, exports-string, exports-subpaths, src) without calling it.
+          const expected: string[] = []
+          if (bin?.kind === "string") expected.push(`bin: @acme/${pkgName} -> ${bin.bin}`)
+          else if (bin?.kind === "object") for (const [k, v] of Object.entries(bin.bin)) expected.push(`bin: ${k} -> ${v}`)
+          if (main) expected.push(`main: ${main}`)
+          if (moduleField) expected.push(`module: ${moduleField}`)
+          if (exportsField?.kind === "string") expected.push(`exports: ${exportsField.exports}`)
+          else if (exportsField?.kind === "object") {
+            const subpaths = Object.keys(exportsField.exports)
+            const shown = subpaths.slice(0, 5)
+            const more = subpaths.length - 5
+            expected.push(`exports: ${shown.join(", ")}${more > 0 ? ` (+${more} more)` : ""}`)
+          }
+          expected.push("src: src/index.ts")
+
+          expect(pkg.entryPoints).toEqual(expected)
+
+          // The rendered text must carry the exact same facts, joined the same way a
+          // person actually reads them — not just the structured object.
+          const rendered = WalkthroughAnalysis.render(overview)
+          expect(rendered).toContain(`  entry: ${expected.join("; ")}`)
+        },
+      ),
+      { numRuns: 200 },
+    )
+  })
+
+  // R2/R7: with no real packages at all, the output must say so plainly, and the
+  // "## Top-level directories" section must appear exactly when there's something to
+  // show — not an artifact of whatever happened to be in the one fixture repo used
+  // elsewhere. Kind: invariant (closes the last Stryker survivors in render()'s fallback
+  // branches, which the other properties never reach since they always generate >=1
+  // package and >=1 top-level directory).
+  test("R2/R7: a repo with no real packages always says so, and lists top-level directories only when there are any", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(fc.stringMatching(/^[a-z][a-z0-9]{0,6}$/), { minLength: 0, maxLength: 3 }),
+        fc.boolean(),
+        (topDirs, hasReadme) => {
+          const files = hasReadme ? ["README.md"] : []
+          const contents: Record<string, string> = hasReadme ? { "README.md": "# hi" } : {}
+          for (const dir of topDirs) files.push(`${dir}/a.txt`)
+          // No package.json anywhere, so there can be no workspace packages to find.
+
+          const overview = WalkthroughAnalysis.analyze({ files, contents })
+          const rendered = WalkthroughAnalysis.render(overview)
+
+          expect(overview.packages).toEqual([])
+          expect(rendered).toContain("No packages detected from package.json files; showing directory layout only.")
+          expect(rendered).not.toContain("## Packages")
+
+          if (topDirs.length === 0) {
+            expect(rendered).not.toContain("## Top-level directories")
+          } else {
+            expect(rendered).toContain("## Top-level directories")
+            for (const dir of topDirs) expect(rendered).toContain(`- ${dir}/ (1 files)`)
+          }
+        },
+      ),
     )
   })
 })
