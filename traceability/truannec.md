@@ -118,3 +118,87 @@ By this line the schema has already validated the file, so `parsed` is always a 
 
 **#74, #75, #76, #79, #81** (line 80, the "not an object" guard in `unknownFields`)
 `unknownFields` is only called on `parsed` and on `parsed.contact` when it exists, and the schema guarantees both are objects. So this guard is never true, and changing it or what it returns has no effect.
+
+## Agent failure case
+
+None of my existing properties had an opencode transcript I could find, so I followed the assignment's fallback. I asked opencode to write a property for **R3** and ran my mutants against it.
+
+**Share link:** https://opncd.ai/share/t5II9gj0 (session "Unknown policy fields property test", model `gpt-5.6-terra-fast`)
+
+### Transcript excerpt
+
+**My prompt:**
+
+> Write one fast-check property-based test for this requirement of the AI-use policy loader (packages/opencode/src/policy/policy.ts, function loadAIPolicy):
+>
+> R3: Unknown fields don't make a policy invalid. The policy still loads and a warning names each unknown field. Acceptance criteria: a valid policy plus an extra field "instructorNotes" loads successfully, and the result includes a warning naming "instructorNotes" and no error.
+>
+> Put it in a new file packages/opencode/test/policy/policy.agent.property.test.ts. Use bun:test and fast-check, write the policy file to <temp dir>/.opencode/ai-policy.json using tmpdir() from ../fixture/fixture, and add fc.configureGlobal({ seed: 42 }) at the top. Don't change any source files.
+
+**opencode's response:** it read `policy.ts`, my existing property file, and the test fixture, then said:
+
+> The loader already emits a precise unknown-field warning; I'll add an isolated property test that varies the `instructorNotes` JSON value while asserting the loaded result has no error and names that field.
+
+It created this file, ran it (`1 pass, 0 fail, 150 expect() calls`), ran `bun typecheck`, and finished with:
+
+> It uses deterministic `fast-check` generation for `instructorNotes`, writes `.opencode/ai-policy.json` via `tmpdir()`, and asserts a loaded result, no error, and the expected warning.
+
+```ts
+import { expect, test } from "bun:test"
+import fc from "fast-check"
+import path from "path"
+import { loadAIPolicy } from "../../src/policy/policy"
+import { tmpdir } from "../fixture/fixture"
+
+fc.configureGlobal({ seed: 42 })
+
+test("R3: instructorNotes preserves a valid policy and produces a warning", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.jsonValue(), async (instructorNotes) => {
+      await using temp = await tmpdir()
+      await Bun.write(
+        path.join(temp.path, ".opencode", "ai-policy.json"),
+        JSON.stringify({
+          courseName: "Introduction to Software Engineering",
+          assignmentName: "OpenCode Feature Project",
+          summary: "Use AI tools responsibly.",
+          allowedUses: ["Brainstorming"],
+          prohibitedUses: ["Submitting unreviewed work"],
+          instructorNotes,
+        }),
+      )
+
+      const result = await loadAIPolicy(temp.path)
+
+      expect(result.status).toBe("loaded")
+      expect(result).not.toHaveProperty("error")
+      if (result.status !== "loaded") throw new Error("Expected policy with instructorNotes to load")
+      expect(result.warnings).toContain('Unknown field "instructorNotes" in .opencode/ai-policy.json')
+    }),
+    { numRuns: 50 },
+  )
+})
+```
+
+### Mutants it let survive
+
+- **H3** (my hand-written R3 mutant: `!Object.hasOwn(fields, key)` → `!(key in fields)`) survived. With H3 applied, opencode's test still reports `1 pass, 0 fail`.
+- I also ran Stryker on just the unknown-field code (`src/policy/policy.ts:70-84`, seed 42) with only opencode's test. It killed **14 of 33 (42.42%)**. The worst survivor was **L81 `Object.keys(value).filter(...)` → `Object.keys(value)`**, which removes the filter so *every* field gets an "Unknown field" warning, including `courseName` and `summary`. Other survivors drop the warnings for unknown fields inside `contact` (L72–73) or add a bogus warning when there's no `contact` (L74).
+
+### Why the property was too weak
+
+It has two problems, a generator that never reaches the bug and a weak oracle:
+- **The generator only varies the *value* of `instructorNotes`.** The policy, the unknown key name, and the shape of the file are all fixed, so it never tries other unknown names (like `toString`, which is what H3 breaks) or unknown fields inside `contact`. Running it 50 times with different JSON values for one field is basically one test case repeated.
+- **`toContain` only checks that one expected warning is in the list.** It never checks that there are no *extra* warnings, so a loader that warns about every field (L81) still passes. It also basically restates what opencode saw in the source: it copied the exact warning string from `policy.ts` instead of checking the requirement, which is "a warning names *each* unknown field".
+
+### Strengthened version
+
+I rewrote [`policy.agent.property.test.ts`](/packages/opencode/test/policy/policy.agent.property.test.ts) to keep opencode's structure but fix both problems:
+- It generates the policy itself, and 1–4 unknown top-level keys drawn from a list that includes names inherited from `Object.prototype` (`constructor`, `toString`, `valueOf`, `hasOwnProperty`). It also adds 0–2 unknown fields inside `contact`.
+- It checks that the clean policy has no warnings at all, and that the policy content is unchanged after unknown fields are added.
+- It requires exactly one warning per unknown field, each naming its full path in quotes (`"toString"`, `"contact.phone"`), and no other warnings.
+
+### Evidence it kills the mutant
+
+- **H3:** the strengthened property fails with H3 applied. Counterexample: a policy plus `{"instructorNotes": 0, "toString": {}}`, where the loader produced no warning for `toString`.
+- **Stryker (same range, same seed):** 14/33 killed (42.42%) before, and **22/33 (66.67%)** after. The newly killed mutants include L81 (warn on every field), L72–73 (nested `contact` warnings), and L74 (the bogus warning). The 11 still surviving are the same equivalent mutants argued above (the six at line 72 and the five at line 80), so the strengthened property kills every non-equivalent mutant in this code.
