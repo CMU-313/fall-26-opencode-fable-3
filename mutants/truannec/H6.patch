@@ -1,0 +1,15 @@
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+index 620aff5..3120df7 100644
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -803,7 +803,9 @@ function App(props: {
+           const previous = shownPolicies.get(directory)
+           const updated = result.status === "loaded" && previous !== undefined && !isDeepEqual(previous, result.policy)
+           dialog.replace(() => <DialogPolicy result={result} updated={updated} />)
+-          if (result.status === "loaded") shownPolicies.set(directory, structuredClone(result.policy))
++          // Keep the first policy shown as the baseline for this session.
++          if (result.status === "loaded" && !shownPolicies.has(directory))
++            shownPolicies.set(directory, structuredClone(result.policy))
+         },
+         category: "System",
+       },

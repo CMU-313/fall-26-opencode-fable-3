@@ -12,7 +12,7 @@ export type Policy = {
 
 export type PolicyLoadResult =
   | { status: "not-found" }
-  | { status: "loaded"; policy: Policy }
+  | { status: "loaded"; policy: Policy; warnings?: readonly string[] }
   | { status: "invalid"; errors: readonly string[] }
 
 export type PolicyNotification = {
@@ -21,7 +21,12 @@ export type PolicyNotification = {
 }
 
 export function buildPolicyNotification(result: PolicyLoadResult): PolicyNotification | undefined {
-  if (result.status === "not-found") return
+  if (result.status === "not-found") {
+    return {
+      message: "No AI-use policy found for this project.",
+      variant: "info",
+    }
+  }
   if (result.status === "invalid") {
     return {
       message: "AI-use policy file is invalid. Run /policy for details",
@@ -46,6 +51,7 @@ export type PolicyDisplay =
       allowedUses: readonly string[]
       prohibitedUses: readonly string[]
       contact: readonly string[]
+      warnings?: readonly string[]
     }
 
 export function buildPolicyDisplay(result: PolicyLoadResult): PolicyDisplay {
@@ -68,5 +74,6 @@ export function buildPolicyDisplay(result: PolicyLoadResult): PolicyDisplay {
     contact: [result.policy.contact?.name, result.policy.contact?.email].filter(
       (value): value is string => value !== undefined,
     ),
+    ...(result.warnings?.length ? { warnings: result.warnings } : {}),
   }
 }

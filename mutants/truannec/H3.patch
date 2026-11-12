@@ -1,0 +1,12 @@
+diff --git a/packages/opencode/src/policy/policy.ts b/packages/opencode/src/policy/policy.ts
+index f506b57..e2d6e5f 100644
+--- a/packages/opencode/src/policy/policy.ts
++++ b/packages/opencode/src/policy/policy.ts
+@@ -79,6 +79,6 @@ export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLo
+ function unknownFields(value: unknown, fields: object, prefix = "") {
+   if (typeof value !== "object" || value === null) return []
+   return Object.keys(value)
+-    .filter((key) => !Object.hasOwn(fields, key))
++    .filter((key) => !(key in fields))
+     .map((key) => `Unknown field "${prefix}${key}" in .opencode/ai-policy.json`)
+ }

@@ -56,6 +56,12 @@ describe("buildPolicyDisplay", () => {
     })
   })
 
+  test("preserves warnings from a successfully loaded policy", () => {
+    expect(
+      buildPolicyDisplay({ status: "loaded", policy, warnings: ['Unknown field "instructorNotes"'] }),
+    ).toMatchObject({ status: "loaded", warnings: ['Unknown field "instructorNotes"'] })
+  })
+
   test("preserves long content for the dialog to wrap and scroll", () => {
     const longSummary = "This policy explains responsible AI use. ".repeat(40)
     const input: PolicyLoadResult = {
@@ -78,8 +84,11 @@ describe("buildPolicyNotification", () => {
     })
   })
 
-  test("does not notify when no policy is configured", () => {
-    expect(buildPolicyNotification({ status: "not-found" })).toBeUndefined()
+  test("notifies when no policy is configured", () => {
+    expect(buildPolicyNotification({ status: "not-found" })).toEqual({
+      message: "No AI-use policy found for this project.",
+      variant: "info",
+    })
   })
 
   test("warns when the policy is invalid", () => {
