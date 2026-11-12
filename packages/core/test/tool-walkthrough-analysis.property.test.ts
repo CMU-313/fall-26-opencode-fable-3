@@ -241,9 +241,16 @@ describe("tool.walkthrough properties", () => {
           if (moduleField) manifest.module = moduleField
           if (exportsField) manifest.exports = exportsField.kind === "string" ? exportsField.exports : exportsField.exports
 
-          const snapshot = buildSnapshot([{ dir: pkgName, name: `@acme/${pkgName}`, selfDeps: [] }], 0)
-          // Overwrite the manifest buildSnapshot wrote with one that has the richer fields.
-          snapshot.contents[`packages/${pkgName}/package.json`] = json(manifest)
+          // Built directly (not via buildSnapshot) so the manifest can carry the richer,
+          // independently-varied fields above.
+          const snapshot = {
+            files: ["package.json", "README.md", `packages/${pkgName}/package.json`, `packages/${pkgName}/src/index.ts`],
+            contents: {
+              "package.json": json({ name: "acme", workspaces: ["packages/*"] }),
+              "README.md": "# Acme",
+              [`packages/${pkgName}/package.json`]: json(manifest),
+            },
+          }
 
           const overview = WalkthroughAnalysis.analyze(snapshot)
           const pkg = overview.packages[0]
