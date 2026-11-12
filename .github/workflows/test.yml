@@ -58,11 +58,19 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
+        # Cold full-suite runs can approach 10 minutes before adding new tests.
         timeout-minutes: 15
         # Default turbo concurrency (10) oversubscribes ubuntu-latest's 4
-        # vCPUs across 5 packages' test tasks running at once — same
+        # vCPUs across 6 packages' test tasks running at once — same
         # contention issue typecheck.yml already caps for tsgo.
-        run: GITHUB_ACTIONS=false bun turbo test --concurrency=4
+        # Use the restored cache and stream unfinished tasks to diagnose timeouts.
+        run: GITHUB_ACTIONS=false bun turbo test --concurrency=4 --cache-dir=node_modules/.cache/turbo --log-order=stream
+
+      - name: Run AI policy properties
+        timeout-minutes: 2
+        working-directory: packages/opencode
+        # Print passing property names explicitly for the project submission evidence.
+        run: GITHUB_ACTIONS=false bun test test/policy/policy.property.test.ts --timeout 30000
 
       - name: Check generated client
         timeout-minutes: 5

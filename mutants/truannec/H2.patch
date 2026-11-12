@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/policy/policy.ts b/packages/opencode/src/policy/policy.ts
+index f506b57..865ae5b 100644
+--- a/packages/opencode/src/policy/policy.ts
++++ b/packages/opencode/src/policy/policy.ts
+@@ -58,6 +58,8 @@ export async function loadAIPolicy(projectDirectory: string): Promise<AIPolicyLo
+   } catch (error) {
+     // Read directly: Bun.file().exists() also returns false for directories.
+     if (error instanceof Error && "code" in error && error.code === "ENOENT") return { status: "not-found" }
++    // A half-written or corrupt file should never block startup: treat it like no policy.
++    if (error instanceof SyntaxError) return { status: "not-found" }
+     return { status: "invalid", error: new Error(formatAIPolicyError(policyPath, error, "json"), { cause: error }) }
+   }
+ 

@@ -65,7 +65,7 @@ describe("AI policy workflow", () => {
     })
   })
 
-  test("shows the empty state without a policy directory or file", async () => {
+  test("shows the empty state and a startup notification without a policy directory or file", async () => {
     for (const createFile of [false, true]) {
       await using temp = await tmpdir()
       if (createFile) await fs.mkdir(path.join(temp.path, ".opencode"), { recursive: true })
@@ -77,7 +77,10 @@ describe("AI policy workflow", () => {
         status: "empty",
         message: "No AI-use policy found for this project. Instructors can add one at .opencode/ai-policy.json.",
       })
-      expect(buildPolicyNotification(result)).toBeUndefined()
+      expect(buildPolicyNotification(result)).toEqual({
+        message: "No AI-use policy found for this project.",
+        variant: "info",
+      })
     }
   })
 
@@ -97,7 +100,7 @@ describe("AI policy workflow", () => {
     })
   })
 
-  test("reports the field for incomplete, wrongly typed, empty, and unknown values", async () => {
+  test("reports the field for incomplete, wrongly typed, and empty values", async () => {
     const cases: ReadonlyArray<{ content: string; field: string }> = [
       { content: JSON.stringify({ assignmentName: "Assignment" }), field: "courseName" },
       {
@@ -120,17 +123,6 @@ describe("AI policy workflow", () => {
         }),
         field: "summary",
       },
-      {
-        content: JSON.stringify({
-          courseName: "Course",
-          assignmentName: "Assignment",
-          summary: "Summary",
-          allowedUses: ["Allowed"],
-          prohibitedUses: ["Prohibited"],
-          extra: true,
-        }),
-        field: "extra",
-      },
     ]
 
     for (const testCase of cases) {
@@ -144,6 +136,45 @@ describe("AI policy workflow", () => {
       expect(buildPolicyDisplay(result)).toEqual(result)
       expect(result.errors.join("\n")).toContain(testCase.field)
     }
+  })
+
+  test("loads unknown fields with named warnings through the TUI mapping and display", async () => {
+    await using temp = await tmpdir()
+    await writePolicy(
+      temp.path,
+      JSON.stringify({
+        courseName: "Course",
+        assignmentName: "Assignment",
+        summary: "Summary",
+        allowedUses: ["Allowed"],
+        prohibitedUses: ["Prohibited"],
+        instructorNotes: "Review the rubric",
+        extra: true,
+      }),
+    )
+    const result = await loadPolicy(temp.path)
+    // Bun's asymmetric assertions can mutate matched properties; render before asserting.
+    const display = buildPolicyDisplay(result)
+    const notification = buildPolicyNotification(result)
+    const warnings = expect.arrayContaining([
+      expect.stringContaining("instructorNotes"),
+      expect.stringContaining("extra"),
+    ])
+
+    expect(result).not.toHaveProperty("error")
+    expect(result).toMatchObject({ status: "loaded", warnings })
+    expect(display).toMatchObject({
+      status: "loaded",
+      courseName: "Course",
+      assignmentName: "Assignment",
+      allowedUses: ["Allowed"],
+      prohibitedUses: ["Prohibited"],
+      warnings,
+    })
+    expect(notification).toEqual({
+      message: "AI-use policy: Course · Assignment. Run /policy to view",
+      variant: "info",
+    })
   })
 
   test("handles empty files and empty objects as invalid", async () => {

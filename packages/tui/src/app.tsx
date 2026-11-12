@@ -65,6 +65,7 @@ import { KVProvider, useKV } from "./context/kv"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { isDeepEqual } from "remeda"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig, type TuiConfig } from "./config"
 import { createTuiApiAdapters } from "./plugin/adapters"
@@ -83,7 +84,7 @@ import {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
-import { buildPolicyNotification, type PolicyLoadResult } from "./policy"
+import { buildPolicyNotification, type Policy, type PolicyLoadResult } from "./policy"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
@@ -392,6 +393,8 @@ function App(props: {
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
+  // Closing the dialog preserves the last policy shown; startup toasts do not establish it.
+  const shownPolicies = new Map<string, Policy>()
 
   const api = createTuiApi(
     createTuiApiAdapters({
@@ -795,10 +798,12 @@ function App(props: {
         title: "View AI-use policy",
         slashName: "policy",
         run: async () => {
-          const result = props.loadAIPolicy
-            ? await props.loadAIPolicy(project.instance.directory())
-            : { status: "not-found" as const }
-          dialog.replace(() => <DialogPolicy result={result} />)
+          const directory = project.instance.directory()
+          const result = props.loadAIPolicy ? await props.loadAIPolicy(directory) : { status: "not-found" as const }
+          const previous = shownPolicies.get(directory)
+          const updated = result.status === "loaded" && previous !== undefined && !isDeepEqual(previous, result.policy)
+          dialog.replace(() => <DialogPolicy result={result} updated={updated} />)
+          if (result.status === "loaded") shownPolicies.set(directory, structuredClone(result.policy))
         },
         category: "System",
       },

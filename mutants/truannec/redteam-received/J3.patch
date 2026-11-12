@@ -1,0 +1,18 @@
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -801,7 +801,13 @@ function App(props: {
+           const directory = project.instance.directory()
+           const result = props.loadAIPolicy ? await props.loadAIPolicy(directory) : { status: "not-found" as const }
+           const previous = shownPolicies.get(directory)
+-          const updated = result.status === "loaded" && previous !== undefined && !isDeepEqual(previous, result.policy)
++          const updated =
++            result.status === "loaded" &&
++            previous !== undefined &&
++            !isDeepEqual(
++              { ...previous, contact: { ...previous.contact, email: undefined } },
++              { ...result.policy, contact: { ...result.policy.contact, email: undefined } },
++          )
+           dialog.replace(() => <DialogPolicy result={result} updated={updated} />)
+           if (result.status === "loaded") shownPolicies.set(directory, structuredClone(result.policy))
+         },
