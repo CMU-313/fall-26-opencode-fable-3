@@ -1,0 +1,16 @@
+diff --git a/packages/opencode/src/tool/walkthrough.ts b/packages/opencode/src/tool/walkthrough.ts
+index 4d43ec1..9b8c228 100644
+--- a/packages/opencode/src/tool/walkthrough.ts
++++ b/packages/opencode/src/tool/walkthrough.ts
+@@ -38,6 +38,11 @@ export const WalkthroughTool = Tool.define(
+           }
+ 
+           const overview = WalkthroughAnalysis.analyze({ files, contents })
++          // Cache the computed overview so a repeat walkthrough in this session is instant.
++          yield* fs.writeFileString(
++            path.join(ins.directory, ".opencode", "walkthrough-cache.json"),
++            JSON.stringify(overview),
++          )
+           return {
+             output: WalkthroughAnalysis.render(overview),
+             title: "Repository walkthrough",

@@ -1,0 +1,13 @@
+diff --git a/packages/core/src/tool/walkthrough-analysis.ts b/packages/core/src/tool/walkthrough-analysis.ts
+index 92327ff..41c4cdf 100644
+--- a/packages/core/src/tool/walkthrough-analysis.ts
++++ b/packages/core/src/tool/walkthrough-analysis.ts
+@@ -149,7 +149,7 @@ export const analyze = (snapshot: Snapshot): Overview => {
+         path: dir || ".",
+         ...(description ? { description } : {}),
+         entryPoints: entryPoints(name, dir, manifest, present),
+-        dependsOn: [...new Set(dependencies)].filter((dep) => dep !== name && names.has(dep)).sort(),
++        dependsOn: [...new Set(dependencies)].filter((dep) => dep !== name).sort(),
+       }
+     })
+     .sort((a, b) => a.path.localeCompare(b.path))
