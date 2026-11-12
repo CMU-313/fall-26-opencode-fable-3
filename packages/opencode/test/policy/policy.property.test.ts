@@ -123,7 +123,7 @@ const validPolicy = fc.record({
   contact: fc.option(
     fc.record({
       name: fc.option(policyText, { nil: undefined }),
-      email: fc.option(fc.constant("staff@example.edu"), { nil: undefined }),
+      email: fc.option(fc.constant<string>("staff@example.edu"), { nil: undefined }),
     }),
     { nil: undefined },
   ),
@@ -159,7 +159,7 @@ const policyRevision = fc
             ? {
                 ...input.policy,
                 contact: {
-                  ...input.policy.contact,
+                  name: input.policy.contact?.name,
                   email: input.policy.contact?.email === "staff@example.edu" ? "ta@example.edu" : "staff@example.edu",
                 },
               }
