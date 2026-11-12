@@ -1,0 +1,19 @@
+diff --git a/packages/tui/src/policy.ts b/packages/tui/src/policy.ts
+index 048109c..d2dd603 100644
+--- a/packages/tui/src/policy.ts
++++ b/packages/tui/src/policy.ts
+@@ -21,12 +21,8 @@ export type PolicyNotification = {
+ }
+ 
+ export function buildPolicyNotification(result: PolicyLoadResult): PolicyNotification | undefined {
+-  if (result.status === "not-found") {
+-    return {
+-      message: "No AI-use policy found for this project.",
+-      variant: "info",
+-    }
+-  }
++  // No policy is the common case; skip the toast so students without one are not nagged.
++  if (result.status === "not-found") return undefined
+   if (result.status === "invalid") {
+     return {
+       message: "AI-use policy file is invalid. Run /policy for details",
