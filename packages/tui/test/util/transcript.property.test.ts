@@ -182,6 +182,25 @@ describe("formatTranscript properties", () => {
       ),
     )
   })
+
+  // R5 (opencode, strengthened): Restoring tool visibility must restore the original copied transcript.
+  // Kind: round-trip. opencode's version only checked A === B, which still passes when hiding tool details
+  // does nothing (H4's stale cache) or hides too little (H2's leaked output), because A and B are wrong the
+  // same way. Each copy is now also checked against the session: A shows every tool input, output and error,
+  // and the hidden copy shows none of them.
+  test("R5 (opencode, strengthened): re-enabling tool details after hiding them restores the original copy", () => {
+    fc.assert(
+      fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
+        const details = ["i", "o", "e"].flatMap((kind) => markers(JSON.stringify(history), kind))
+        const a = formatTranscript(info, history, { ...options, toolDetails: true })
+        details.forEach((item) => expect(a).toContain(item))
+        const hidden = formatTranscript(info, history, { ...options, toolDetails: false })
+        details.forEach((item) => expect(hidden).not.toContain(item))
+        const b = formatTranscript(info, history, { ...options, toolDetails: true })
+        expect(b).toBe(a)
+      }),
+    )
+  })
 })
 
 // Each message starts with a visible text part holding a unique marker, so a property can find exactly where

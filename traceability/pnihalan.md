@@ -15,7 +15,7 @@
 | R7 | C-9, S-9, O-9: "Identical, otherwise I can't trust it." | Copying an unchanged session twice with the same settings must produce identical output. | With no new messages or setting changes, two consecutive /copy operations produce byte-for-byte identical strings. | No | Two copies of the same session and settings, one from a deep clone, are byte-for-byte equal (invariant); copying the same session again after moving the clock forward gives the same output (metamorphic) | `packages/tui/test/util/transcript.property.test.ts` — "R7: copying an unchanged session twice gives identical output"; "R7: copying the same session later gives identical output" | H5 |
 | R8 | C-13, S-13, O-13: "Tell me there's nothing to copy, and don't wipe my clipboard." / "Would expect the command to copy an empty message if there is no conversation content available." | When a session has no user prompts and no completed assistant responses, /copy shows "Nothing to copy" and does not write to the clipboard. | With a session whose only message is an assistant response still being generated, and a clipboard containing "hello", /copy shows "Nothing to copy" and the clipboard still contains "hello". | Yes | | | — |
 
-Properties written or suggested by opencode or another AI tool: R1, R2, R5, R7 (properties and generators written by Claude Code, including the Project 5 strengthening and the second R7 property)
+Properties written or suggested by opencode or another AI tool: R1, R2, R5, R7 (properties and generators written by Claude Code, including the Project 5 strengthening and the second R7 property); R5 also has "R5 (opencode)", written by opencode for the Agent failure case and then strengthened (see below)
 
 ## Requirement changes
 
@@ -79,3 +79,80 @@ The other 21 survivors change formatting that none of R1–R8 specifies, so kill
 - the assistant metadata heading: agent, model name and response duration (lines 74, 79, 83)
 - the trailing blank line after a tool block (line 109)
 - the text returned for part types the generator never produces, such as file attachments (line 113)
+
+## Agent failure case
+
+**Property:** opencode wrote an R5 property, "R5 (opencode): re-enabling tool details after hiding them restores the original copy", in `packages/tui/test/util/transcript.property.test.ts`. It was opencode (Build agent, Free Models Router) in session `ses_e2e3313d0ffeY5jm5927oy3Swu` on 11/12/2026. opencode's `/share` command no longer exists in this version, so the evidence is screenshots plus a text excerpt copied with `/copy`.
+
+Screenshots: [prompt and edit](../mutants/pnihalan/agent-transcript-1.png), [test run and summary](../mutants/pnihalan/agent-transcript-2.png)
+
+![opencode prompt and the property it wrote](../mutants/pnihalan/agent-transcript-1.png)
+![opencode running the test and summarizing](../mutants/pnihalan/agent-transcript-2.png)
+
+**Transcript excerpt (from `/copy`):**
+
+> **User:** Write one fast-check property for this requirement and add it to the end of the describe block in packages/tui/test/util/transcript.property.test.ts, reusing that file's existing generators (session, messages, settings). It should test formatTranscript from packages/tui/src/util/transcript.ts.
+>
+> Requirement R5: "Restoring tool visibility must restore the original copied transcript." Acceptance criteria: "With tool details enabled, copy session A. Hide tool details and copy again. Re-enable them and copy session B. A and B must be identical."
+>
+> Name the test "R5 (opencode): …" and add a comment with the requirement and its kind.
+>
+> **Assistant (Build · Free Models Router):** The file already has an R5 test in the middle of the describe block. I'll add the requested property at the end of the describe block (before its closing `})`).
+
+```ts
+  // R5 (opencode): Restoring tool visibility must restore the original copied transcript.
+  // Kind: round-trip. With tool details enabled, copy session A. Hide tool details and copy again.
+  // Re-enable them and copy session B. A and B must be identical.
+  test("R5 (opencode): re-enabling tool details after hiding them restores the original copy", () => {
+    fc.assert(
+      fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
+        const a = formatTranscript(info, history, { ...options, toolDetails: true })
+        formatTranscript(info, history, { ...options, toolDetails: false })
+        const b = formatTranscript(info, history, { ...options, toolDetails: true })
+        expect(b).toBe(a)
+      }),
+    )
+  })
+```
+
+> **Assistant:** All 6 tests pass, including the new R5 property test. … Verification that `formatTranscript(..., toolDetails: true)` produces identical output before and after a `toolDetails: false` call
+
+**Mutant it let survive: H4.** H4 caches each part's formatted text by message and part ID and ignores the display settings, so after the first copy, turning tool details off or on changes nothing. That is exactly the "restore" bug R5 is about. opencode's property also let H2 survive (tool output leaks when details are hidden). Run alone with seed 42, it killed none of H1–H5, and Stryker scored it at **2.08%** (2 of 96 mutants killed).
+
+**Why the property was too weak:** it has a weak oracle. It restates the acceptance criterion (copy A equals copy B) but never checks what either copy contains, and it throws away the details-off copy without looking at it. "A equals B" stays true even when both copies are wrong. Any bug that makes A and B wrong *in the same way* passes. Under H4, A, the hidden copy and B all come from the same cache, so A === B holds even though hiding tool details did nothing. Under H2, A and B both show tool output correctly, and only the discarded hidden copy is wrong. The comparison has no independent oracle: nothing ties the copies back to the session's actual tool details.
+
+**Strengthened version** (replaces opencode's test in the file):
+
+```ts
+  // R5 (opencode, strengthened): Restoring tool visibility must restore the original copied transcript.
+  // Kind: round-trip. opencode's version only checked A === B, which still passes when hiding tool details
+  // does nothing (H4's stale cache) or hides too little (H2's leaked output), because A and B are wrong the
+  // same way. Each copy is now also checked against the session: A shows every tool input, output and error,
+  // and the hidden copy shows none of them.
+  test("R5 (opencode, strengthened): re-enabling tool details after hiding them restores the original copy", () => {
+    fc.assert(
+      fc.property(session, messages(fc.boolean()), settings, (info, history, options) => {
+        const details = ["i", "o", "e"].flatMap((kind) => markers(JSON.stringify(history), kind))
+        const a = formatTranscript(info, history, { ...options, toolDetails: true })
+        details.forEach((item) => expect(a).toContain(item))
+        const hidden = formatTranscript(info, history, { ...options, toolDetails: false })
+        details.forEach((item) => expect(hidden).not.toContain(item))
+        const b = formatTranscript(info, history, { ...options, toolDetails: true })
+        expect(b).toBe(a)
+      }),
+    )
+  })
+```
+
+The `markers` helper and the tagged generator are the same ones added during Stryker strengthening: every tool input, output and error in a generated session ends with a unique marker (`[[i…]]`, `[[o…]]`, `[[e…]]`).
+
+**Evidence it kills the mutant** (run with `bun test test/util/transcript.property.test.ts -t "R5 \(opencode"`, seed 42):
+
+| | opencode's property | Strengthened |
+|---|---|---|
+| Real code | pass | pass |
+| H4 (stale cache) | pass, **survives** | **fails, killed** |
+| H2 (leaked tool output) | pass, survives | **fails, killed** |
+| Stryker score, this property alone | 2.08% (2 / 96) | 42.71% (41 / 96) |
+
+H1, H3 and H5 target R1, R2 and R7, so an R5 property isn't expected to kill them. The full suite kills all five.
