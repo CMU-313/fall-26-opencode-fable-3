@@ -1,0 +1,15 @@
+diff --git a/packages/core/src/tool/walkthrough-analysis.ts b/packages/core/src/tool/walkthrough-analysis.ts
+index 92327ff..97d7dcf 100644
+--- a/packages/core/src/tool/walkthrough-analysis.ts
++++ b/packages/core/src/tool/walkthrough-analysis.ts
+@@ -110,7 +110,9 @@ const entryPoints = (name: string, dir: string, manifest: Json, files: ReadonlyS
+     entries.push(`exports: ${subpaths.slice(0, MAX_EXPORTS).join(", ")}${more > 0 ? ` (+${more} more)` : ""}`)
+   }
+   for (const base of ENTRY_BASES) {
+-    const found = ENTRY_EXTENSIONS.map((extension) => `${base}.${extension}`).find((file) => files.has(join(dir, file)))
++    const found = ENTRY_EXTENSIONS.map((extension) => `${base}.${extension}`).find((file) =>
++      [...files].some((f) => f.startsWith(join(dir, file))),
++    )
+     if (found) entries.push(`src: ${found}`)
+   }
+   return entries
