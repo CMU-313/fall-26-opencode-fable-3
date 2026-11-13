@@ -1,0 +1,23 @@
+diff --git a/packages/tui/src/util/transcript.ts b/packages/tui/src/util/transcript.ts
+index c27e58d..c6ce440 100644
+--- a/packages/tui/src/util/transcript.ts
++++ b/packages/tui/src/util/transcript.ts
+@@ -83,7 +83,18 @@ export function formatAssistantHeader(
+   return `## Assistant (${Locale.titlecase(msg.agent)} · ${modelName}${duration ? ` · ${duration}` : ""})\n\n`
+ }
+ 
++const formattedParts = new Map<string, string>()
++
+ export function formatPart(part: Part, options: TranscriptOptions): string {
++  const key = `${part.messageID}/${part.id}`
++  const cached = formattedParts.get(key)
++  if (cached !== undefined) return cached
++  const result = renderPart(part, options)
++  formattedParts.set(key, result)
++  return result
++}
++
++function renderPart(part: Part, options: TranscriptOptions): string {
+   if (part.type === "text" && !part.synthetic) {
+     return `${part.text}\n\n`
+   }

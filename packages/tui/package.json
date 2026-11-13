@@ -67,8 +67,10 @@
     "solid-js": "catalog:"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "10.1.1",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native-preview": "catalog:",
+    "fast-check": "4.10.2"
   }
 }

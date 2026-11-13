@@ -1,0 +1,7 @@
+{
+  "testRunner": "command",
+  "commandRunner": { "command": "bun test test/util/transcript.property.test.ts" },
+  "mutate": ["src/util/transcript.ts:26-114"],
+  "coverageAnalysis": "off",
+  "reporters": ["html", "clear-text", "progress"]
+}
